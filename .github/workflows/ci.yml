@@ -17,6 +17,7 @@ jobs:
         with:
           version: '0.10.18+6c83a7f62'
           core-version: '0.10.18+6c83a7f62'
+      - run: moon update
       - run: moon version --all
       - run: moon fmt --check
       - run: moon check --target ${{ matrix.target }} --deny-warn
@@ -38,6 +39,7 @@ jobs:
         with:
           version: '0.10.18+6c83a7f62'
           core-version: '0.10.18+6c83a7f62'
+      - run: moon update
       - run: python -m pip install -r scripts/requirements-test.txt
       - run: python scripts/download_server.py
       - run: python scripts/test_all.py
