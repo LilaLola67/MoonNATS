@@ -1,0 +1,5 @@
+import {
+  "LilaLola67/moonnats" @nats,
+}
+
+pkgtype(kind: "executable")

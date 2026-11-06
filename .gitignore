@@ -1,0 +1,16 @@
+.DS_Store
+_build/
+target/
+.mooncakes/
+.env
+.env.*
+*.pem
+*.key
+*.log
+private/
+application/
+submissions/
+*.docx
+*.pdf
+AGENTS.md
+.githooks/

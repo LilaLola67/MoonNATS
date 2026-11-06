@@ -1,0 +1,57 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "LilaLola67/moonnats"
+
+import {
+  "moonbitlang/core/debug",
+}
+
+// Values
+pub fn publish(String, Bytes, reply_to? : String) -> Bytes raise ProtocolError
+
+pub fn subscribe(String, Int32, queue? : String) -> Bytes raise ProtocolError
+
+pub fn unsubscribe(Int32, max_messages? : Int32) -> Bytes raise ProtocolError
+
+// Errors
+pub suberror ProtocolError {
+  Invalid(String)
+} derive(@debug.Debug)
+pub fn ProtocolError::to_repr(Self) -> @debug.Repr
+
+// Types and methods
+pub struct Decoder {
+  mut buffer : Array[Byte]
+  mut pending : (String, Int32, String?, Int32)?
+  max_line : Int32
+  max_payload : Int32
+  mut failed : Bool
+}
+pub fn Decoder::feed(Self, Bytes) -> Array[Event] raise ProtocolError
+pub fn Decoder::finish(Self) -> Unit raise ProtocolError
+pub fn Decoder::new(max_line? : Int32, max_payload? : Int32) -> Self raise ProtocolError
+
+pub(all) enum Event {
+  Info(String)
+  Msg(Message)
+  Ping
+  Pong
+  Ok
+  ServerError(String)
+} derive(Eq, @debug.Debug)
+pub fn Event::equal(Self, Self) -> Bool
+pub fn Event::not_equal(Self, Self) -> Bool
+pub fn Event::to_repr(Self) -> @debug.Repr
+
+pub(all) struct Message {
+  subject : String
+  sid : Int32
+  reply_to : String?
+  payload : Bytes
+} derive(Eq, @debug.Debug)
+pub fn Message::equal(Self, Self) -> Bool
+pub fn Message::not_equal(Self, Self) -> Bool
+pub fn Message::to_repr(Self) -> @debug.Repr
+
+// Type aliases
+
+// Traits
