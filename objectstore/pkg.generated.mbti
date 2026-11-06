@@ -1,0 +1,42 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "LilaLola67/moonnats/objectstore"
+
+import {
+  "LilaLola67/moonnats/jetstream",
+}
+
+// Values
+pub async fn create(@jetstream.JetStream, String, max_bytes? : Int64) -> Bucket
+
+pub fn open(@jetstream.JetStream, String) -> Bucket raise @jetstream.JetStreamError
+
+// Errors
+
+// Types and methods
+pub struct Bucket {
+  js : @jetstream.JetStream
+  name : String
+}
+pub async fn Bucket::delete(Self, String) -> Unit
+pub async fn Bucket::destroy(Self) -> Unit
+pub async fn Bucket::get(Self, String, max_bytes? : Int32) -> Bytes
+pub async fn Bucket::get_info(Self, String) -> ObjectInfo
+pub async fn Bucket::get_to(Self, String, async (Bytes) -> Unit) -> ObjectInfo
+pub async fn Bucket::list(Self) -> Array[ObjectInfo]
+pub async fn Bucket::put(Self, String, Bytes, chunk_size? : Int32) -> ObjectInfo
+pub async fn Bucket::put_stream(Self, String, async () -> Bytes?, chunk_size? : Int32, description? : String) -> ObjectInfo
+
+pub(all) struct ObjectInfo {
+  name : String
+  bucket : String
+  nuid : String
+  size : Int64
+  chunks : Int32
+  digest : String
+  deleted : Bool
+  raw : Json
+}
+
+// Type aliases
+
+// Traits

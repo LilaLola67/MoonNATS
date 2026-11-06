@@ -414,17 +414,18 @@ pub fn metadata(message : @client.Received) -> Metadata raise {
   }
   let p = reply.split(".").to_array()
   let n = p.length()
-  guard n >= 9 && p[0] == "$JS" && p[1] == "ACK" else {
+  guard (n == 9 || n >= 11) && p[0] == "$JS" && p[1] == "ACK" else {
     raise Invalid("ACK subject")
   }
+  let base = if n == 9 { 2 } else { 4 }
   {
-    stream: p[n - 7].to_owned(),
-    consumer: p[n - 6].to_owned(),
-    deliveries: @string.parse_int64(p[n - 5]),
-    stream_sequence: @string.parse_int64(p[n - 4]),
-    consumer_sequence: @string.parse_int64(p[n - 3]),
-    timestamp_ns: @string.parse_int64(p[n - 2]),
-    pending: @string.parse_int64(p[n - 1]),
+    stream: p[base].to_owned(),
+    consumer: p[base + 1].to_owned(),
+    deliveries: @string.parse_int64(p[base + 2]),
+    stream_sequence: @string.parse_int64(p[base + 3]),
+    consumer_sequence: @string.parse_int64(p[base + 4]),
+    timestamp_ns: @string.parse_int64(p[base + 5]),
+    pending: @string.parse_int64(p[base + 6]),
   }
 }
 
@@ -438,6 +439,9 @@ pub async fn acknowledge(
 ) -> Unit {
   guard message.reply_to is Some(subject) && subject.has_prefix("$JS.ACK.") else {
     raise Invalid("missing ACK reply subject")
+  }
+  guard !sync || kind == "ack" else {
+    raise Invalid("synchronous confirmation requires ACK")
   }
   guard delay_ms >= 0 else { raise Invalid("negative redelivery delay") }
   let body = match kind {

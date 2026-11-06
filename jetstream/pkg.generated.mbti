@@ -1,0 +1,86 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "LilaLola67/moonnats/jetstream"
+
+import {
+  "LilaLola67/moonnats",
+  "LilaLola67/moonnats/client",
+  "moonbitlang/core/debug",
+}
+
+// Values
+pub async fn acknowledge(@client.Client, @client.Received, kind? : String, delay_ms? : Int32, sync? : Bool) -> Unit
+
+pub fn check_response(Json) -> Json raise JetStreamError
+
+pub fn decode_json(Bytes) -> Json raise
+
+pub fn integer(Int64) -> Json
+
+pub fn integer_field(Json, String) -> Int64 raise
+
+pub fn metadata(@client.Received) -> Metadata raise
+
+pub fn text_field(Json, String) -> String raise JetStreamError
+
+pub fn validate_name(String) -> Unit raise JetStreamError
+
+// Errors
+pub(all) suberror JetStreamError {
+  Api(Int32, Int32, String)
+  Invalid(String)
+  Status(Int32, String)
+  Missing(String)
+} derive(@debug.Debug)
+pub fn JetStreamError::to_repr(Self) -> @debug.Repr
+
+// Types and methods
+pub struct Consumer {
+  js : JetStream
+  stream : String
+  name : String
+}
+pub async fn Consumer::delete(Self) -> Unit
+pub async fn Consumer::fetch(Self, batch? : Int32, expires_ms? : Int32, max_bytes? : Int32) -> Array[@client.Received]
+pub async fn Consumer::info(Self) -> Json
+pub async fn Consumer::update(Self, Json) -> Unit
+
+pub struct JetStream {
+  client : @client.Client
+  prefix : String
+}
+pub async fn JetStream::account_info(Self) -> Json
+pub async fn JetStream::api(Self, String, data? : Json) -> Json
+pub fn JetStream::consumer(Self, String, String) -> Consumer raise JetStreamError
+pub async fn JetStream::consumers(Self, String, offset? : Int32) -> Json
+pub async fn JetStream::create_consumer(Self, String, String, filter? : String, ack_wait_ms? : Int32, max_deliver? : Int32) -> Consumer
+pub async fn JetStream::create_consumer_config(Self, String, String, Json) -> Consumer
+pub async fn JetStream::create_stream(Self, String, Array[String], storage? : String, history? : Int32) -> Json
+pub async fn JetStream::create_stream_config(Self, String, Json) -> Json
+pub async fn JetStream::delete_stream(Self, String) -> Unit
+pub async fn JetStream::get_message(Self, String, String, sequence? : Int64) -> Json
+pub fn JetStream::new(@client.Client, domain? : String) -> Self raise JetStreamError
+pub async fn JetStream::publish(Self, String, Bytes, message_id? : String, expected_stream? : String, expected_last_sequence? : Int64, expected_last_subject_sequence? : Int64, headers? : @moonnats.Headers) -> PubAck
+pub async fn JetStream::purge_stream(Self, String, filter? : String) -> Unit
+pub async fn JetStream::stream_info(Self, String) -> Json
+pub async fn JetStream::streams(Self, offset? : Int32) -> Json
+pub async fn JetStream::update_stream(Self, String, Json) -> Json
+
+pub(all) struct Metadata {
+  stream : String
+  consumer : String
+  deliveries : Int64
+  stream_sequence : Int64
+  consumer_sequence : Int64
+  timestamp_ns : Int64
+  pending : Int64
+}
+
+pub(all) struct PubAck {
+  stream : String
+  sequence : Int64
+  duplicate : Bool
+}
+
+// Type aliases
+
+// Traits

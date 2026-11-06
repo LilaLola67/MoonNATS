@@ -92,7 +92,16 @@ pub async fn Bucket::create(
   key : String,
   value : Bytes,
 ) -> Int64 {
-  self.put(key, value, expected_revision=0L)
+  self.put(key, value, expected_revision=0L) catch {
+    @js.Api(_, 10071, _) => {
+      let entry = self.get(key)
+      guard entry.operation == "DEL" || entry.operation == "PURGE" else {
+        raise @js.Invalid("key already exists")
+      }
+      self.put(key, value, expected_revision=entry.revision)
+    }
+    error => raise error
+  }
 }
 
 ///|

@@ -36,12 +36,17 @@ fn meta_subject(
 
 ///|
 fn info(j : Json) -> ObjectInfo raise {
+  let chunks = @js.integer_field(j, "chunks")
+  guard chunks >= 0L && chunks <= 10000000L else {
+    raise @js.Invalid("chunk count limit")
+  }
+  @js.validate_name(@js.text_field(j, "nuid"))
   {
     name: @js.text_field(j, "name"),
     bucket: @js.text_field(j, "bucket"),
     nuid: @js.text_field(j, "nuid"),
     size: @js.integer_field(j, "size"),
-    chunks: @js.integer_field(j, "chunks").to_int(),
+    chunks: chunks.to_int(),
     digest: match j {
       { "digest": String(d), .. } => d
       _ => ""
@@ -86,7 +91,11 @@ pub async fn Bucket::get_info(self : Bucket, name : String) -> ObjectInfo {
   guard j is { "message": { "data": String(data), .. }, .. } else {
     raise @js.Invalid("object metadata")
   }
-  info(@js.decode_json(@base64.decode(data)))
+  let result = info(@js.decode_json(@base64.decode(data)))
+  guard result.bucket == self.name && result.name == name else {
+    raise @js.Invalid("object identity mismatch")
+  }
+  result
 }
 
 ///|
@@ -109,7 +118,11 @@ pub async fn Bucket::put_stream(
   }
   let id = self.js.client.new_inbox().replace_all(old=".", new="_")
   let chunk_subject = "$O." + self.name + ".C." + id
+  let mut committing = false
   errdefer @async.protect_from_cancel(() => {
+    if committing {
+      return
+    }
     self.js.purge_stream("OBJ_" + self.name, filter=chunk_subject) catch {
       _ => ()
     }
@@ -145,6 +158,7 @@ pub async fn Bucket::put_stream(
     "mtime": Json(modified),
     "options": { "max_chunk_size": Json(chunk_size) },
   }
+  committing = true
   ignore(
     self.js.publish(
       meta,

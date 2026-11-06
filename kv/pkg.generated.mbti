@@ -1,0 +1,49 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "LilaLola67/moonnats/kv"
+
+import {
+  "LilaLola67/moonnats/client",
+  "LilaLola67/moonnats/jetstream",
+}
+
+// Values
+pub async fn create(@jetstream.JetStream, String, history? : Int32, ttl_ms? : Int32) -> Bucket
+
+pub fn open(@jetstream.JetStream, String) -> Bucket raise @jetstream.JetStreamError
+
+// Errors
+
+// Types and methods
+pub struct Bucket {
+  js : @jetstream.JetStream
+  name : String
+}
+pub async fn Bucket::create(Self, String, Bytes) -> Int64
+pub async fn Bucket::delete(Self, String, purge? : Bool, expected_revision? : Int64) -> Int64
+pub async fn Bucket::destroy(Self) -> Unit
+pub async fn Bucket::get(Self, String, revision? : Int64) -> Entry
+pub async fn Bucket::history(Self, String) -> Array[Entry]
+pub async fn Bucket::put(Self, String, Bytes, expected_revision? : Int64) -> Int64
+pub async fn Bucket::update(Self, String, Bytes, Int64) -> Int64
+pub async fn Bucket::watch(Self, pattern? : String, updates_only? : Bool) -> Watch
+
+pub(all) struct Entry {
+  bucket : String
+  key : String
+  value : Bytes
+  revision : Int64
+  operation : String
+  pending : Int64
+}
+
+pub struct Watch {
+  bucket : Bucket
+  subscription : @client.Subscription
+  consumer : @jetstream.Consumer
+}
+pub async fn Watch::close(Self) -> Unit
+pub async fn Watch::next(Self, timeout_ms? : Int32) -> Entry
+
+// Type aliases
+
+// Traits
