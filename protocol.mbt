@@ -91,6 +91,7 @@ fn Decoder::line(
   out : Array[Event],
 ) -> Unit raise ProtocolError {
   let fields = line
+    .replace_all(old="\t", new=" ")
     .split(" ")
     .filter(s => !s.is_empty())
     .map(s => s.to_owned())
