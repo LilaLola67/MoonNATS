@@ -5,7 +5,8 @@ MoonNATS source is licensed under Apache-2.0. Protocol definitions and compatibi
 | Source | Use | License |
 | --- | --- | --- |
 | [NATS documentation](https://docs.nats.io/reference/protocols/client) | Client wire protocol and JetStream API behavior | Upstream documentation terms |
-| [nats-io/nats.go](https://github.com/nats-io/nats.go) | API capability reference; KV and Object Store interoperability conventions | Apache-2.0 |
+| [nats-io/jwt](https://github.com/nats-io/jwt) | Operator/account/user claim layout for synthetic test credentials | Apache-2.0 |
+| [nats-io/nats.go](https://github.com/nats-io/nats.go) | API capability reference; KV/Object Store conventions and microservice discovery schemas | Apache-2.0 |
 | [MoonBit core](https://github.com/moonbitlang/core) | Bundled async runtime, networking, TLS, JSON and encodings | Apache-2.0 |
 | [moonbitlang/x](https://github.com/moonbitlang/x) | SHA-256, UTC time formatting and system utilities | Apache-2.0 |
 | [hustcer/mbt-ed25519](https://github.com/hustcer/mbt-ed25519) | Dependency for Ed25519 key derivation and signatures | Apache-2.0 |

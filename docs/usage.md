@@ -94,3 +94,7 @@ let restored = objects.get("report.bin", max_bytes=67108864)
 ## 类型化消息
 
 `typed.Codec[T]` 包含 `encode`/`decode` 两个可抛错函数。`json_codec[T]()` 用于实现 `ToJson` 与 `FromJson` 的类型。`typed.publish`、`typed.request`、`typed.next` 在 Bytes 接口上增加类型检查，不改变底层消息语义。
+
+## 持续消费与运维接口
+
+参见 [进阶使用](advanced.md)，包括 Worker、并发发布、标准微服务、Ordered/Push Reader、配置缓存、对象链接、TLS-first、动态凭据与指标。原有低层接口保留。

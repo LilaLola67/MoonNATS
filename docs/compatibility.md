@@ -14,7 +14,7 @@
 - JetStream 消费按至少一次语义使用。应用须根据业务 ID/序号实现幂等；消息去重受服务器配置的窗口约束。
 - 请求会在超时、取消或重连时清理；请求超时覆盖订阅、发送与等待响应，清理阶段另有最多 250ms 的发送预算。
 - Drain 在超时后仍会逻辑关闭连接。只有通过 `process_next` 登记的处理器会被自动等待。
-- Watch 和 Consumer 属于服务器资源，应用应安排关闭/删除。Pull Consumer 是主要消费接口；未提供完整 Push Consumer 高层封装。
+- Watch 和 Consumer 属于服务器资源，应用应安排关闭/删除。提供 Pull、Push Reader 与基于 Pull 的 Ordered Reader；Push 的心跳和流控由 next 驱动，应持续读取。
 
 ## 资源边界
 
@@ -28,7 +28,7 @@
 
 ## 当前不覆盖
 
-服务器端实现、集群管理、完整 Push Consumer 封装、跨账户 KV 映射、Object Store 链接对象、自动 JWT 凭据刷新、TLS-first 端口握手及独立安全审计。WSS 使用平台 WebSocket 信任设置；原生 TLS 支持先 INFO 后升级的标准流程。NKey 与完整 operator/account/user JWT 认证已与真实服务器验证；测试凭据由 Node.js 标准加密库独立生成，仅用于本地测试。
+服务器端实现、集群管理、跨账户 KV 映射、连接存续期间定时刷新 JWT 及独立安全审计。动态 credentials 回调会在每次初始连接及重连时调用。原生 TLS-first 已验证；当前 core/async/tls 客户端没有客户端证书参数，尚不支持双向 TLS，浏览器证书由平台管理。WSS 使用平台 WebSocket 信任设置；原生 TLS 支持先 INFO 后升级的标准流程。NKey 与完整 operator/account/user JWT 认证已与真实服务器验证；测试凭据由 Node.js 标准加密库独立生成，仅用于本地测试。
 
 Ed25519 依赖包明确说明其实现尚未审计且不保证恒定时间；需要侧信道防护的部署应使用外部签名回调和合适的密钥管理方案。
 
@@ -41,3 +41,14 @@ websocket { listen: "127.0.0.1:18080", no_tls: true }
 ```
 
 该明文配置仅用于本机示例。真实远程连接使用适合部署的 TLS/WSS 与认证配置。
+
+## 0.3 高层接口约定
+
+- Worker 默认 Manual；OnSuccess 仅在处理器正常返回后 ACK。stop 停止下一轮拉取，等待已取到的处理完成；处理器抛错会终止本次 consume 并取消其他 Worker，不会自动 ACK 失败消息。持久化业务副作用需要调用方幂等。
+- Publisher 的 max_pending 为 1—4096，max_bytes 限制在途载荷总字节；达到条数上限等待，超过字节预算报错。flush 与退出作用域均会报告发布失败。取消时可能已有部分消息送达。
+- Ordered Reader 是单路顺序读取，检测 Consumer 序号间隙、删除与重连后，从最后交给调用方的 Stream 序号恢复。Stream 中已过期或删除的消息无法恢复；不提供业务处理恰好一次保证。
+- ConfigCache 构建成功与 Snapshot 事件标记初始视图就绪；next 必须持续调用来应用变化。重连期间 ready 为 false/get 返回 None；恢复后发送全新 Snapshot。快照重建限时 10 秒，默认最多 10000 个键，序号缺口也触发重建。视图不是跨键事务快照，也不会自动运行后台更新任务。
+- 断线缓存默认 0（禁用）。仅缓冲未尝试发送、且不含回复主题的发布；请求与结果不确定的写入不重放。连接恢复后按顺序发送，部分写失败通过 WriteUncertain 事件报告；关闭丢弃缓存通过 BufferDiscarded 报告。返回成功仅表示进入内存缓存，进程退出会丢失。
+- 微服务 Endpoint 在每个实例内顺序处理；同一队列组的多个实例可扩展并行处理。PING/INFO/STATS 遵循 io.nats.micro.v1；stop 等待在途处理。版本当前接受三段数字形式。
+- 对象链接解析最多 16 层，Bucket 链接通过 linked_bucket 打开；封存后服务器拒绝修改。同一对象的元数据更新与覆盖请由应用串行化，当前没有元数据 CAS。
+- 状态/事件回调应快速返回；指标不含凭据、服务器地址和主题标签。sent_messages 统计已接受的发布（包括缓存），并非持久化确认数；Publisher ack_metrics 单独统计成功 PubAck 次数及累计耗时。
