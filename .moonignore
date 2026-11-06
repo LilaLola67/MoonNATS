@@ -1,0 +1,16 @@
+.tools/
+.test-data/
+.integration/
+.github/
+.githooks/
+AGENTS.md
+*.log
+*.pem
+*.key
+.env
+.env.*
+private/
+application/
+submissions/
+*.docx
+*.pdf

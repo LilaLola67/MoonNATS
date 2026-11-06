@@ -1,67 +1,124 @@
 # MoonNATS
 
-MoonBit 原生 NATS 客户端，目标是为后端服务、任务队列和事件驱动应用提供可复用的消息通信能力，并支持 JetStream 持久化消费。
+[![CI](https://github.com/LilaLola67/MoonNATS/actions/workflows/ci.yml/badge.svg)](https://github.com/LilaLola67/MoonNATS/actions/workflows/ci.yml)
 
-> 开发阶段：协议核心初版。当前示例不连接服务器，TCP 客户端与 JetStream 尚未实现。
+MoonBit 原生 NATS 客户端，提供异步消息通信、JetStream 持久消费、KV 与 Object Store。适用于后端事件通知、请求响应、后台任务、配置分发与文件交换。
 
-## 当前功能
+## 能力
 
-- 按字节增量解码 INFO、MSG、PING、PONG、+OK、-ERR。
-- 保留任意二进制消息体，支持回复主题与空消息。
-- 编码 PUB、SUB、UNSUB，支持队列组和订阅通配符。
-- 控制行与消息大小限制、数值溢出检查、EOF 截断检测。
-- 协议错误后禁止复用解码器，避免失步后继续处理消息。
-- 无第三方运行时依赖，协议核心与传输层分离。
+| 模块 | 已实现内容 |
+| --- | --- |
+| 协议核心 | 增量解析 INFO/MSG/HMSG/PING/PONG/+OK/-ERR；CONNECT/PUB/HPUB/SUB/UNSUB；二进制载荷、重复 Headers、状态码、长度与截断检查 |
+| 连接 | 原生 TCP/TLS、原生与浏览器 WebSocket；握手、心跳、多地址切换、指数退避、服务发现与订阅恢复 |
+| NATS Core | 普通/通配符/队列组订阅、自动退订、请求响应、无响应者错误、超时取消、Flush、Drain |
+| 流量控制 | 有界待发送字节预算、订阅队列和字节预算、慢消费者错误、连接状态回调、统计信息 |
+| 认证 | 用户密码、Token、NKey seed、JWT + nonce 签名；TLS 默认验证证书和主机名，可配置自定义 CA |
+| JetStream | Stream/Consumer 创建、查询、更新、删除与列表；发布确认、消息 ID 去重、预期版本条件；Pull Consumer、批量拉取、ACK/NAK/延迟 NAK/WPI/TERM、同步 ACK、消息元数据 |
+| KV | 读写、创建、版本条件更新、历史、删除/清理标记、删除后重建、当前值与增量 Watch |
+| Object Store | 流式分块上传/下载、元数据、对象覆盖、列举、删除、SHA-256 校验、有界内存读取 |
+| 类型与工具 | 可自定义 Codec、类型化 JSON 发布/请求/订阅、原生诊断 CLI、三个最小使用示例与浏览器示例 |
 
-当前不支持 HMSG/HPUB、CONNECT 选项编码、网络连接、认证、TLS、自动重连或 JetStream。收到不支持的服务器操作会明确报错。协议核心不能当作完整网络客户端使用。
+协议与认证包支持 native、JS、wasm、wasm-gc。客户端及上层消息 API 支持 native 和 JS；JS 使用浏览器标准 WebSocket API，原生支持 TCP、TLS、WebSocket。CLI 为 native。
 
-## 环境与运行
+当前版本 0.2.0，API 仍可能调整。尚未发布到 Mooncakes；仓库中的模块坐标为 `LilaLola67/moonnats`。
 
-需要 MoonBit 工具链；本地验证版本为 moonc 0.10.18。安装说明：https://www.moonbitlang.com/download/
+## 从源码运行
+
+需要 MoonBit **0.10.18** 或兼容版本、原生 C 编译器。CI 固定 `0.10.18+6c83a7f62`；JS 测试使用 Node.js 24。
 
 ```sh
 git clone https://github.com/LilaLola67/MoonNATS.git
 cd MoonNATS
-moon check --deny-warn
-moon build
-moon test
+moon check --target native --deny-warn
+moon build --target native
+moon test --target all
 moon run cmd/main
 ```
 
-示例将 orders.* 订阅和带回复主题的发布编码为协议字节，然后把一条 MSG 拆成两个片段输入解码器。两次输出事件数分别为 0 和 2，表示完整消息与 PING 在第二片段到达后得到处理。
-
-## 库接口
-
-`Decoder::new` 创建解码器，`feed(Bytes)` 返回完整事件列表，`finish()` 检查 EOF。`publish`、`subscribe`、`unsubscribe` 返回可写入传输层的字节。
-
-同一次 feed 若发生错误，该调用已解析的事件不会返回；连接层必须丢弃该解码器并关闭或重新建立连接。限制按单条控制行和消息计算，调用方仍需约束单次传入片段及事件批次大小。
-
-## 测试
+`cmd/main` 是不需要服务器的协议分片示例。网络示例需要运行 NATS Server；JetStream 示例需要 `-js`。
 
 ```sh
-moon test --target wasm-gc
-moon test --target js
-moon test --target native
+nats-server -a 127.0.0.1 -p 4222 -js
+# 另一个终端：
+moon run examples/pubsub
+moon run examples/request_reply
+moon run examples/tasks
 ```
 
-测试包含所有两段切分位置、逐字节输入、粘包、二进制载荷、零长度消息、错误长度、数值溢出、截断数据、大小限制、协议注入与非法主题。
+示例默认连接 `nats://127.0.0.1:4222`，也可设置 `MOONNATS_URL`。
 
-## 开发路线
+## 库用法
 
-1. 协议核心：当前基础编解码；补全 headers、CONNECT、协议一致性测试。
-2. 原生连接：async TCP、INFO/CONNECT 握手、PING/PONG、订阅路由和请求响应。
-3. 可靠连接：超时、取消、背压、重连、订阅恢复、认证与 TLS。
-4. JetStream：Stream/Consumer API、发布确认、Pull Consumer、ACK 与重投。
-5. 真实 NATS Server 互操作测试、文档示例和 Mooncakes 发布。
+在 `moon.pkg` 导入：
 
-各阶段按实际完成情况更新；这里的计划不表示现有兼容能力。首个稳定发布前 API 可能调整。
+```moonbit
+import {
+  "LilaLola67/moonnats/client",
+  "moonbitlang/core/async",
+}
+```
+
+```moonbit
+async fn main {
+  @client.with_client(@client.Options::new(), c => {
+    let sub = c.subscribe("orders.*", queue="workers")
+    c.flush()
+    c.publish("orders.created", b"order-42")
+    let msg = sub.next(timeout_ms=5000)
+    println(msg.subject)
+    c.unsubscribe(sub)
+  })
+}
+```
+
+`with_client` 管理后台任务和连接生命周期，离开作用域时取消读取任务并释放连接。`Client` 不应逃逸出该作用域。`flush()` 表示服务器已处理此前命令，JetStream 发布需检查 `PubAck`。
+
+更多示例见 [API 使用说明](docs/usage.md)、[兼容范围与限制](docs/compatibility.md)。
+
+## CLI
+
+```sh
+moon run cmd/moonnats -- --help
+moon run cmd/moonnats -- info
+moon run cmd/moonnats -- pub example.greeting hello
+moon run cmd/moonnats -- sub example.greeting 1
+moon run cmd/moonnats -- request example.echo hello
+```
+
+支持 Stream/Consumer、KV、Object Store 操作。凭据从环境变量读取，避免写入命令行：`MOONNATS_USER`、`MOONNATS_PASSWORD`、`MOONNATS_TOKEN`、`MOONNATS_NKEY_SEED`、`MOONNATS_JWT`、`MOONNATS_CA`。多个地址用 `MOONNATS_URL` 的逗号分隔。
+
+CLI 错误写入 stderr 并返回非零状态；订阅载荷以 Base64 输出。`fetch` 不自动确认消息；`object-get` 验证完整性后才将临时文件改为目标文件，并拒绝覆盖已有输出。
+
+## 测试与复现
+
+```sh
+moon fmt --check
+moon check --target all --deny-warn
+moon build --target all
+moon test --target all
+```
+
+完整集成测试需要 Python 3.12+、Node.js 24、OpenSSL、curl 和 C 编译器：
+
+```sh
+python -m venv .venv
+# 激活虚拟环境后：
+python -m pip install -r scripts/requirements-test.txt
+python scripts/download_server.py
+python scripts/test_all.py
+```
+
+下载脚本固定官方 NATS Server 2.15.2 并核对发布的 SHA-256。测试仅监听本机地址，运行后关闭自己启动的服务器。覆盖原生与 JS、真实重连、取消清理、认证、TLS 拒绝路径、队列组、背压、Drain、JetStream 重投、KV CAS/Watch、对象损坏检测，以及官方 nats-py 的 KV/Object Store 双向互操作。CI 同时执行四后端检查/构建/单元测试和独立集成测试。
+
+## 浏览器示例
+
+```sh
+moon build examples/browser --target js
+python -m http.server 12800 --bind 127.0.0.1
+```
+
+打开 `http://127.0.0.1:12800/examples/browser/`，连接到已配置的 NATS WebSocket 地址。测试配置示例见 [兼容说明](docs/compatibility.md)。
 
 ## 来源与许可证
 
-Apache-2.0。协议依据 NATS 官方客户端协议文档独立实现：
-https://docs.nats.io/reference/protocols/client
-
-接口设计参考官方 nats.go 的能力划分，当前未移植其源码：
-https://github.com/nats-io/nats.go
-
-NATS 是独立的上游项目，MoonNATS 并非官方客户端。
+Apache-2.0。依据 [NATS Client Protocol](https://docs.nats.io/reference/protocols/client) 与 [JetStream API](https://docs.nats.io/reference/jetstream/api/) 实现，参考 [nats.go](https://github.com/nats-io/nats.go) 的能力划分和 KV/Object Store 协议约定。当前未移植其源码。依赖与测试工具来源见 [THIRD_PARTY.md](THIRD_PARTY.md)。MoonNATS 不是 NATS 官方客户端。

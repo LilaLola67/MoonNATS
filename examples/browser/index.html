@@ -1,0 +1,7 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>MoonNATS WebSocket example</title>
+<style>body{font:16px system-ui;max-width:720px;margin:70px auto;padding:24px;color:#172554;background:#f8fafc}input,button{font:inherit;padding:10px;border:1px solid #94a3b8;border-radius:6px}input{width:330px}button{background:#1e40af;color:white;cursor:pointer}pre{padding:20px;background:#e2e8f0;white-space:pre-wrap}p{line-height:1.7}</style>
+<h1>MoonNATS WebSocket example</h1><p>Connect to a NATS WebSocket endpoint and send a message through a temporary subscription.</p>
+<label for="server">Server</label> <input id="server" value="ws://127.0.0.1:18080"><button id="connect">Connect and test</button><pre id="result">Ready</pre>
+<script>document.getElementById('connect').onclick=function(){this.disabled=true;const s=document.createElement('script');s.type='module';s.src='../../_build/js/debug/build/examples/browser/browser.js';s.onerror=()=>document.getElementById('result').textContent='Build the example first: moon build examples/browser --target js';document.body.append(s);};</script>
+</html>

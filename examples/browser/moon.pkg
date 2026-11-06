@@ -1,0 +1,9 @@
+import {
+  "LilaLola67/moonnats/client",
+  "moonbitlang/core/async",
+  "moonbitlang/core/encoding/utf8",
+}
+
+pkgtype(kind: "executable")
+
+supported_targets = "+js"
