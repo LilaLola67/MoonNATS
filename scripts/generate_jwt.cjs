@@ -29,3 +29,8 @@ fs.writeFileSync('.test-data/operator.jwt',token(operator,operator,'operator',{}
 const accountToken=token(operator,account,'account',{limits:{subs:-1,data:-1,payload:-1,imports:-1,exports:-1,wildcards:true,conn:-1,leaf:-1}});
 fs.writeFileSync('.test-data/user.jwt',token(account,user,'user',{pub:{},sub:{},subs:-1,data:-1,payload:-1}));
 fs.writeFileSync('.tools/jwt.local.conf','listen: "127.0.0.1:14227"\noperator: ".test-data/operator.jwt"\nresolver: MEMORY\nresolver_preload: { '+account.publicKey+': "'+accountToken+'" }\n');
+
+// Public all-zero NKey vector, never a deployment credential.
+fs.writeFileSync('.test-data/user.creds',
+  '-----BEGIN NATS USER JWT-----\n'+fs.readFileSync('.test-data/user.jwt','utf8')+'\n------END NATS USER JWT------\n\n'+
+  '-----BEGIN USER NKEY SEED-----\nSUAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEQ\n------END USER NKEY SEED------\n');

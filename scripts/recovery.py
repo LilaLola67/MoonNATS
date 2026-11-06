@@ -6,7 +6,7 @@ client_exe=root/'_build/native/debug/build/cmd/recovery'/'recovery.exe'
 server=client=None
 log=open(root/'.tools/recovery-server.log','w')
 def start():
-    p=subprocess.Popen([str(server_exe),'-a','127.0.0.1','-p','14225'],stdout=log,stderr=log,cwd=root)
+    p=subprocess.Popen([str(server_exe),'-a','127.0.0.1','-p','14225','-js','-sd',str(root/'.test-data/recovery-js')],stdout=log,stderr=log,cwd=root)
     time.sleep(.3)
     if p.poll() is not None: raise RuntimeError('Recovery test port unavailable')
     return p
@@ -24,7 +24,7 @@ try:
         except queue.Empty: continue
         print(line,end='',flush=True)
         if line.strip()=='RESTART':
-            server.terminate();server.wait(timeout=5);time.sleep(.15);server=start()
+            server.terminate();server.wait(timeout=5);time.sleep(1.5);server=start()
     reader.join(timeout=2)
     while not lines.empty(): print(lines.get(),end='')
     print(client.stdout.read(),end='')

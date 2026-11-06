@@ -10,3 +10,11 @@ import {
 pkgtype(kind: "executable")
 
 supported_targets = "+native"
+
+import {
+  "LilaLola67/moonnats/micro",
+}
+
+import {
+  "moonbitlang/core/async/stdio",
+}

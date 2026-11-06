@@ -92,7 +92,36 @@ async fn main {
     ),
     c => c.flush(),
   )
+  let credentials = @auth.Credentials::parse(
+    @fs.read_text(".test-data/user.creds"),
+  )
+  let mut calls = 0
+  @client.with_client(
+    @client.Options::new(servers=["nats://127.0.0.1:14227"], heartbeat_ms=0, credentials=nonce => {
+      calls += 1
+      let refreshed = @auth.Credentials::parse(
+        @fs.read_text(".test-data/user.creds"),
+      )
+      refreshed.key.sign_nonce(nonce.unwrap(), jwt=refreshed.jwt)
+    }),
+    c => c.flush(),
+  )
+  assert_eq(calls, 1)
+  assert_eq(credentials.key.public_key, key.public_key)
+  @client.with_client(
+    @client.Options::new(
+      servers=["tls://localhost:14228"],
+      tls_first=true,
+      trust=@client.CustomPemFile(".test-data/cert.pem"),
+      heartbeat_ms=0,
+      connect=@wire.ConnectOptions::new(
+        user="test-user",
+        password="synthetic-test-password",
+      ),
+    ),
+    c => c.flush(),
+  )
   println(
-    "auth: TLS certificate trust, hostname rejection, invalid credentials, user/password, token, NKey and operator/account JWT nonce authentication PASS",
+    "auth: TLS certificate trust, hostname rejection, invalid credentials, user/password, token, NKey and operator/account JWT nonce authentication, standard creds, dynamic credentials and TLS-first PASS",
   )
 }

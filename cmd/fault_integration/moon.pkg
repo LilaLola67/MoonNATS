@@ -1,0 +1,9 @@
+import {
+  "LilaLola67/moonnats/client",
+  "moonbitlang/core/async",
+  "moonbitlang/core/async/stdio",
+}
+
+pkgtype(kind: "executable")
+
+supported_targets = "+native"

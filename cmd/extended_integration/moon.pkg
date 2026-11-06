@@ -1,0 +1,15 @@
+import {
+  "LilaLola67/moonnats/client",
+  "LilaLola67/moonnats" @wire,
+  "LilaLola67/moonnats/jetstream" @js,
+  "LilaLola67/moonnats/kv",
+  "LilaLola67/moonnats/objectstore" @objects,
+  "LilaLola67/moonnats/micro",
+  "moonbitlang/core/async",
+  "moonbitlang/core/env",
+  "moonbitlang/core/encoding/utf8",
+}
+
+pkgtype(kind: "executable")
+
+supported_targets = "+native+js"

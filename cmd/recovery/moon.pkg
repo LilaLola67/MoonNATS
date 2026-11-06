@@ -1,5 +1,8 @@
 import {
   "LilaLola67/moonnats/client",
+  "LilaLola67/moonnats" @wire,
+  "LilaLola67/moonnats/jetstream" @js,
+  "LilaLola67/moonnats/kv",
   "moonbitlang/core/async",
 }
 

@@ -1,6 +1,7 @@
 ///|
 async fn main {
   let states = []
+  let mut credential_calls = 0
   @client.with_client(
     @client.Options::new(
       servers=["nats://127.0.0.1:14226", "nats://127.0.0.1:14225"],
@@ -8,22 +9,68 @@ async fn main {
       timeout_ms=500,
       reconnect_delay_ms=20,
       on_state=s => states.push(s),
+      reconnect_attempts=30,
+      reconnect_buffer_bytes=128,
+      reconnect_jitter_ms=10,
+      credentials=_ => {
+        credential_calls += 1
+        @wire.ConnectOptions::new()
+      },
     ),
     c => {
       let sub = c.subscribe("recovery", max_messages=2)
       c.flush()
       c.publish("recovery", b"before")
       assert_eq(sub.next().payload, b"before")
+      let js = @js.JetStream::new(c)
+      js.delete_stream("KV_MN_RECOVERY") catch {
+        _ => ()
+      }
+      let bucket = @kv.create(js, "MN_RECOVERY")
+      ignore(bucket.put("config", b"saved"))
+      let cache = bucket.config_cache()
+      ignore(cache.next())
+      let ordered = js.ordered_consumer(
+        "KV_MN_RECOVERY",
+        filter="$KV.MN_RECOVERY.>",
+      )
+      ignore(ordered.next())
       @stdio.stderr.text.write("RESTART\n")
-      @async.sleep(200)
+      @async.with_timeout(3000, () => {
+        while c.state() != @client.Reconnecting {
+          @async.sleep(5)
+        }
+      })
+      assert_true(!cache.ready())
+      c.publish("recovery", b"buffered")
+      assert_true(c.statistics().buffered_bytes > 0)
+      assert_true(
+        try {
+          c.publish("recovery", Bytes::make(200, 0))
+          false
+        } catch {
+          @client.SlowConsumer => true
+          _ => false
+        },
+      )
       @async.with_timeout(5000, () => {
         while c.statistics().reconnects == 0L {
           @async.sleep(10)
         }
       })
       c.flush()
-      c.publish("recovery", b"after")
-      assert_eq(sub.next().payload, b"after")
+      assert_eq(sub.next().payload, b"buffered")
+      assert_eq(c.statistics().buffered_bytes, 0)
+      assert_true(credential_calls >= 2)
+      assert_true(
+        cache.next() is @kv.Snapshot(entries) && entries.length() == 1,
+      )
+      assert_eq(cache.get("config").unwrap().value, b"saved")
+      ignore(bucket.put("config", b"new"))
+      assert_eq(ordered.next().payload, b"new")
+      ordered.close()
+      cache.close()
+      bucket.destroy()
       assert_true(states.contains(@client.Reconnecting))
       assert_true(
         try {
