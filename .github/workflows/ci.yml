@@ -20,4 +20,3 @@ jobs:
       - run: moon build --target ${{ matrix.target }}
       - run: moon test --target ${{ matrix.target }}
       - run: moon run cmd/main --target ${{ matrix.target }}
-

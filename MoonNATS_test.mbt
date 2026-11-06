@@ -154,3 +154,45 @@ test "encoders reject command injection and invalid wildcards" {
     },
   )
 }
+
+///|
+test "case insensitive operations and tab separated message fields" {
+  let d = @moonnats.Decoder::new()
+  let result = d.feed(b"ping\r\nmsg\ta\t1\t1\r\nx\r\n")
+  assert_eq(result[0], @moonnats.Event::Ping)
+  assert_eq(
+    result[1],
+    @moonnats.Event::Msg({
+      subject: "a",
+      sid: 1,
+      reply_to: None,
+      payload: b"x",
+    }),
+  )
+  d.finish()
+}
+
+///|
+test "configuration and numeric boundaries" {
+  for n in [0, -1, 2147483647] {
+    assert_true(
+      try {
+        ignore(@moonnats.Decoder::new(max_line=n))
+        false
+      } catch {
+        _ => true
+      },
+    )
+  }
+  assert_true(
+    try {
+      ignore(@moonnats.Decoder::new(max_payload=-1))
+      false
+    } catch {
+      _ => true
+    },
+  )
+  let d = @moonnats.Decoder::new(max_payload=0)
+  assert_eq(d.feed(b"MSG a 2147483647 0\r\n\r\n").length(), 1)
+  d.finish()
+}
