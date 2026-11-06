@@ -6,7 +6,11 @@ import {
 }
 
 // Values
+pub fn connect_command(ConnectOptions) -> Bytes
+
 pub fn publish(String, Bytes, reply_to? : String) -> Bytes raise ProtocolError
+
+pub fn publish_headers(String, Headers, Bytes, reply_to? : String) -> Bytes raise ProtocolError
 
 pub fn subscribe(String, Int32, queue? : String) -> Bytes raise ProtocolError
 
@@ -19,9 +23,21 @@ pub suberror ProtocolError {
 pub fn ProtocolError::to_repr(Self) -> @debug.Repr
 
 // Types and methods
+pub(all) struct ConnectOptions {
+  name : String
+  user : String?
+  password : String?
+  token : String?
+  jwt : String?
+  nkey : String?
+  signature : String?
+  echo : Bool
+}
+pub fn ConnectOptions::new(name? : String, user? : String, password? : String, token? : String, jwt? : String, nkey? : String, signature? : String, echo? : Bool) -> Self
+
 pub struct Decoder {
   mut buffer : Array[Byte]
-  mut pending : (String, Int32, String?, Int32)?
+  mut pending : (String, Int32, String?, Int32, Int32)?
   max_line : Int32
   max_payload : Int32
   mut failed : Bool
@@ -33,6 +49,7 @@ pub fn Decoder::new(max_line? : Int32, max_payload? : Int32) -> Self raise Proto
 pub(all) enum Event {
   Info(String)
   Msg(Message)
+  Hmsg(Message, Headers)
   Ping
   Pong
   Ok
@@ -41,6 +58,20 @@ pub(all) enum Event {
 pub fn Event::equal(Self, Self) -> Bool
 pub fn Event::not_equal(Self, Self) -> Bool
 pub fn Event::to_repr(Self) -> @debug.Repr
+
+pub(all) struct Headers {
+  entries : Array[(String, String)]
+  status : Int32?
+  description : String
+} derive(Eq, @debug.Debug)
+pub fn Headers::encode(Self) -> Bytes raise ProtocolError
+pub fn Headers::equal(Self, Self) -> Bool
+pub fn Headers::get(Self, String) -> String?
+pub fn Headers::get_all(Self, String) -> Array[String]
+pub fn Headers::new(entries? : Array[(String, String)]) -> Self
+pub fn Headers::not_equal(Self, Self) -> Bool
+pub fn Headers::parse(Bytes) -> Self raise ProtocolError
+pub fn Headers::to_repr(Self) -> @debug.Repr
 
 pub(all) struct Message {
   subject : String
@@ -51,6 +82,18 @@ pub(all) struct Message {
 pub fn Message::equal(Self, Self) -> Bool
 pub fn Message::not_equal(Self, Self) -> Bool
 pub fn Message::to_repr(Self) -> @debug.Repr
+
+pub(all) struct ServerInfo {
+  raw : Json
+  max_payload : Int32
+  headers : Bool
+  tls_required : Bool
+  auth_required : Bool
+  jetstream : Bool
+  nonce : String?
+  connect_urls : Array[String]
+}
+pub fn ServerInfo::parse(String) -> Self raise ProtocolError
 
 // Type aliases
 

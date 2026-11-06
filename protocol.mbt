@@ -15,6 +15,7 @@ pub(all) struct Message {
 pub(all) enum Event {
   Info(String)
   Msg(Message)
+  Hmsg(Message, Headers)
   Ping
   Pong
   Ok
@@ -24,7 +25,7 @@ pub(all) enum Event {
 ///|
 pub struct Decoder {
   mut buffer : Array[Byte]
-  mut pending : (String, Int32, String?, Int32)?
+  mut pending : (String, Int32, String?, Int32, Int32)?
   max_line : Int32
   max_payload : Int32
   mut failed : Bool
@@ -123,8 +124,10 @@ fn Decoder::line(
       guard line.length() > 5 else { raise Invalid("missing server error") }
       out.push(ServerError(line[5:].to_owned()))
     }
-    "MSG" => {
-      guard fields.length() == 4 || fields.length() == 5 else {
+    "MSG" | "HMSG" => {
+      let has_headers = fields[0].to_upper() == "HMSG"
+      let base = if has_headers { 5 } else { 4 }
+      guard fields.length() == base || fields.length() == base + 1 else {
         raise Invalid("MSG arity")
       }
       guard subject(fields[1], false) else {
@@ -132,7 +135,11 @@ fn Decoder::line(
       }
       let sid = number(fields[2])
       guard sid > 0 else { raise Invalid("invalid subscription id") }
-      let reply = if fields.length() == 5 { Some(fields[3]) } else { None }
+      let reply = if fields.length() == base + 1 {
+        Some(fields[3])
+      } else {
+        None
+      }
       if reply is Some(r) {
         guard subject(r, false) else { raise Invalid("invalid reply subject") }
       }
@@ -140,7 +147,15 @@ fn Decoder::line(
       guard size <= self.max_payload else {
         raise Invalid("payload limit exceeded")
       }
-      self.pending = Some((fields[1], sid, reply, size))
+      let header_size = if has_headers {
+        number(fields[fields.length() - 2])
+      } else {
+        0
+      }
+      guard !has_headers || (header_size >= 12 && header_size <= size) else {
+        raise Invalid("header length")
+      }
+      self.pending = Some((fields[1], sid, reply, size, header_size))
     }
     _ => raise Invalid("unsupported server operation")
   }
@@ -155,19 +170,27 @@ fn Decoder::consume(
   for byte in chunk {
     self.buffer.push(byte)
     let n = self.buffer.length()
-    if self.pending is Some((subj, sid, reply, size)) {
+    if self.pending is Some((subj, sid, reply, size, header_size)) {
       if n == size + 2 {
         guard self.buffer[size] == 13 && self.buffer[size + 1] == 10 else {
           raise Invalid("payload terminator")
         }
-        out.push(
-          Msg({
-            subject: subj,
-            sid,
-            reply_to: reply,
-            payload: Bytes::from_array(self.buffer[:size]),
-          }),
-        )
+        let msg = {
+          subject: subj,
+          sid,
+          reply_to: reply,
+          payload: Bytes::from_array(self.buffer[header_size:size]),
+        }
+        if header_size > 0 {
+          out.push(
+            Hmsg(
+              msg,
+              Headers::parse(Bytes::from_array(self.buffer[:header_size])),
+            ),
+          )
+        } else {
+          out.push(Msg(msg))
+        }
         self.pending = None
         self.buffer = []
       }
