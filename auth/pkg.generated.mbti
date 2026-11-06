@@ -1,0 +1,29 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "LilaLola67/moonnats/auth"
+
+import {
+  "LilaLola67/moonnats",
+  "moonbitlang/core/debug",
+}
+
+// Values
+
+// Errors
+pub suberror AuthError {
+  InvalidSeed
+} derive(@debug.Debug)
+pub fn AuthError::to_repr(Self) -> @debug.Repr
+
+// Types and methods
+pub struct UserKey {
+  public_key : String
+  // private fields
+}
+pub fn UserKey::from_raw_seed(Bytes) -> Self raise
+pub fn UserKey::from_seed(String) -> Self raise
+pub fn UserKey::sign_nonce(Self, String, jwt? : String, name? : String) -> @moonnats.ConnectOptions
+pub fn UserKey::signer(Self, jwt? : String) -> (String) -> @moonnats.ConnectOptions raise
+
+// Type aliases
+
+// Traits

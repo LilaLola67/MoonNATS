@@ -1,6 +1,6 @@
 name = "LilaLola67/moonnats"
 
-version = "0.1.0"
+version = "0.2.0"
 
 readme = "README.md"
 
@@ -10,11 +10,11 @@ license = "Apache-2.0"
 
 keywords = [ "nats", "messaging", "protocol" ]
 
-preferred_target = "wasm-gc"
+preferred_target = "native"
 
-description = "Incremental NATS protocol core in MoonBit; native client and JetStream under development."
+description = "MoonBit NATS client with TCP/TLS, WebSocket, JetStream, KV and Object Store."
 
 import {
-  "moonbitlang/async@0.22.7",
   "moonbitlang/x@0.5.7",
+  "hustcer/ed25519@0.6.1",
 }
