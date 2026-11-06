@@ -1,0 +1,9 @@
+import {
+  "LilaLola67/moonnats/client",
+  "LilaLola67/moonnats" @wire,
+  "LilaLola67/moonnats/jetstream" @js,
+  "moonbitlang/async",
+  "moonbitlang/core/encoding/base64",
+}
+
+supported_targets = "+native"
