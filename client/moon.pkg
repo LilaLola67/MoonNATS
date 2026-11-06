@@ -1,15 +1,30 @@
 import {
   "LilaLola67/moonnats" @wire,
-  "moonbitlang/async",
-  "moonbitlang/async/socket",
-  "moonbitlang/async/tls",
-  "moonbitlang/async/websocket" @ws,
-  "moonbitlang/async/aqueue",
+  "moonbitlang/core/async",
+  "moonbitlang/core/async/socket",
+  "moonbitlang/core/async/tls",
+  "moonbitlang/core/async/websocket" @ws,
+  "moonbitlang/core/async/aqueue",
   "moonbitlang/core/debug",
 }
 
-supported_targets = "+native"
+supported_targets = "+native+js"
 
 import {
   "moonbitlang/core/string",
 }
+
+import {
+  "moonbitlang/core/env",
+  "moonbitlang/core/async/js_async",
+}
+
+options(
+  targets: {
+    "transport_native.mbt": [ "native" ],
+    "transport_js.mbt": [ "js" ],
+  },
+)
+// Transport imports are used by different target-specific files.
+
+warnings = "-unused_package"

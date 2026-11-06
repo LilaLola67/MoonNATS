@@ -1,0 +1,103 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "LilaLola67/moonnats/client"
+
+import {
+  "LilaLola67/moonnats",
+  "moonbitlang/core/debug",
+}
+
+// Values
+pub async fn[X] with_client(Options, async (Client) -> X) -> X
+
+// Errors
+pub(all) suberror ClientError {
+  ConnectionClosed
+  Disconnected
+  NoResponders
+  SlowConsumer
+  InvalidOption(String)
+  Server(String)
+  RetryExhausted
+  PublishUncertain
+} derive(@debug.Debug)
+pub fn ClientError::to_repr(Self) -> @debug.Repr
+
+// Types and methods
+pub struct Client {
+  mut info : @moonnats.ServerInfo
+  // private fields
+}
+pub fn Client::close(Self) -> Unit
+pub async fn Client::drain(Self, timeout_ms? : Int32) -> Unit
+pub async fn Client::flush(Self, timeout_ms? : Int32) -> Unit
+pub fn Client::new_inbox(Self) -> String
+pub async fn Client::publish(Self, String, Bytes, headers? : @moonnats.Headers, reply_to? : String) -> Unit
+pub async fn Client::reply(Self, Received, Bytes, headers? : @moonnats.Headers) -> Unit
+pub async fn Client::request(Self, String, Bytes, headers? : @moonnats.Headers, timeout_ms? : Int32) -> Received
+pub fn Client::state(Self) -> State
+pub fn Client::statistics(Self) -> Statistics
+pub async fn Client::subscribe(Self, String, queue? : String, max_messages? : Int32, capacity? : Int32) -> Subscription
+pub async fn Client::unsubscribe(Self, Subscription) -> Unit
+
+pub(all) struct Options {
+  servers : Array[String]
+  connect : @moonnats.ConnectOptions
+  timeout_ms : Int32
+  reconnect_attempts : Int32
+  reconnect_delay_ms : Int32
+  heartbeat_ms : Int32
+  max_pending_bytes : Int32
+  subscription_capacity : Int32
+  trust : Trust
+  on_state : (State) -> Unit
+  signer : ((String) -> @moonnats.ConnectOptions raise)?
+}
+pub fn Options::new(servers? : Array[String], connect? : @moonnats.ConnectOptions, timeout_ms? : Int32, reconnect_attempts? : Int32, reconnect_delay_ms? : Int32, heartbeat_ms? : Int32, max_pending_bytes? : Int32, subscription_capacity? : Int32, trust? : Trust, on_state? : (State) -> Unit, signer? : (String) -> @moonnats.ConnectOptions raise) -> Self
+
+pub(all) struct Received {
+  subject : String
+  reply_to : String?
+  payload : Bytes
+  headers : @moonnats.Headers
+}
+
+pub(all) enum State {
+  Connecting
+  Connected
+  Reconnecting
+  Draining
+  Closed
+} derive(Eq, @debug.Debug)
+pub fn State::equal(Self, Self) -> Bool
+pub fn State::not_equal(Self, Self) -> Bool
+pub fn State::to_repr(Self) -> @debug.Repr
+
+pub(all) struct Statistics {
+  sent_messages : Int64
+  received_messages : Int64
+  sent_bytes : Int64
+  received_bytes : Int64
+  reconnects : Int64
+  pending_bytes : Int32
+  subscriptions : Int32
+  slow_consumers : Int64
+}
+
+pub struct Subscription {
+  sid : Int32
+  subject : String
+  // private fields
+}
+pub async fn Subscription::next(Self, timeout_ms? : Int32) -> Received
+pub fn Subscription::pending(Self) -> Int32
+pub async fn Subscription::process_next(Self, async (Received) -> Unit, timeout_ms? : Int32) -> Unit
+pub fn Subscription::received_count(Self) -> Int64
+
+pub(all) enum Trust {
+  SystemRoots
+  CustomPemFile(String)
+}
+
+// Type aliases
+
+// Traits

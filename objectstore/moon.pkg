@@ -1,7 +1,7 @@
 import {
   "LilaLola67/moonnats" @wire,
   "LilaLola67/moonnats/jetstream" @js,
-  "moonbitlang/async",
+  "moonbitlang/core/async",
   "moonbitlang/core/encoding/base64",
   "moonbitlang/core/encoding/utf8",
   "moonbitlang/core/env",
@@ -9,4 +9,4 @@ import {
   "moonbitlang/x/crypto",
 }
 
-supported_targets = "+native"
+supported_targets = "+native+js"
