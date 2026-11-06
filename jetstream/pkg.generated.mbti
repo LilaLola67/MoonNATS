@@ -24,6 +24,8 @@ pub fn text_field(Json, String) -> String raise JetStreamError
 
 pub fn validate_name(String) -> Unit raise JetStreamError
 
+pub async fn[X] with_publisher(JetStream, async (Publisher) -> X, max_pending? : Int32, max_bytes? : Int32) -> X
+
 // Errors
 pub(all) suberror JetStreamError {
   Api(Int32, Int32, String)
@@ -34,21 +36,57 @@ pub(all) suberror JetStreamError {
 pub fn JetStreamError::to_repr(Self) -> @debug.Repr
 
 // Types and methods
+pub(all) struct AccountUsage {
+  memory : Int64
+  storage : Int64
+  streams : Int64
+  consumers : Int64
+  limits : Json
+}
+
+pub(all) enum AckMode {
+  Manual
+  OnSuccess
+}
+
+pub(all) enum AckPolicy {
+  Explicit
+  NoAck
+  All
+}
+
 pub struct Consumer {
   js : JetStream
   stream : String
   name : String
 }
+pub async fn Consumer::consume(Self, WorkControl, async (@client.Received) -> Unit, concurrency? : Int32, ack_mode? : AckMode, poll_ms? : Int32) -> Unit
 pub async fn Consumer::delete(Self) -> Unit
 pub async fn Consumer::fetch(Self, batch? : Int32, expires_ms? : Int32, max_bytes? : Int32) -> Array[@client.Received]
 pub async fn Consumer::info(Self) -> Json
 pub async fn Consumer::update(Self, Json) -> Unit
+
+pub(all) struct ConsumerConfig {
+  filter : String
+  ack_policy : AckPolicy
+  ack_wait_ms : Int32
+  max_deliver : Int32
+  max_ack_pending : Int32
+  start_sequence : Int64?
+}
+pub fn ConsumerConfig::new(filter? : String, ack_policy? : AckPolicy, ack_wait_ms? : Int32, max_deliver? : Int32, max_ack_pending? : Int32, start_sequence? : Int64) -> Self
+pub fn ConsumerConfig::to_json(Self) -> Json raise
 
 pub struct JetStream {
   client : @client.Client
   prefix : String
 }
 pub async fn JetStream::account_info(Self) -> Json
+pub async fn JetStream::account_usage(Self) -> AccountUsage
+pub async fn JetStream::add_consumer(Self, String, String, ConsumerConfig) -> Consumer
+pub async fn JetStream::add_stream(Self, String, StreamConfig) -> Json
+pub async fn JetStream::all_consumers(Self, String) -> Array[Json]
+pub async fn JetStream::all_streams(Self) -> Array[Json]
 pub async fn JetStream::api(Self, String, data? : Json) -> Json
 pub fn JetStream::consumer(Self, String, String) -> Consumer raise JetStreamError
 pub async fn JetStream::consumers(Self, String, offset? : Int32) -> Json
@@ -59,8 +97,10 @@ pub async fn JetStream::create_stream_config(Self, String, Json) -> Json
 pub async fn JetStream::delete_stream(Self, String) -> Unit
 pub async fn JetStream::get_message(Self, String, String, sequence? : Int64) -> Json
 pub fn JetStream::new(@client.Client, domain? : String) -> Self raise JetStreamError
+pub async fn JetStream::ordered_consumer(Self, String, filter? : String, start_sequence? : Int64) -> OrderedReader
 pub async fn JetStream::publish(Self, String, Bytes, message_id? : String, expected_stream? : String, expected_last_sequence? : Int64, expected_last_subject_sequence? : Int64, headers? : @moonnats.Headers) -> PubAck
 pub async fn JetStream::purge_stream(Self, String, filter? : String) -> Unit
+pub async fn JetStream::push_consumer(Self, String, String, filter? : String, heartbeat_ms? : Int32, ack_policy? : AckPolicy, deliver_policy? : String) -> PushReader
 pub async fn JetStream::stream_info(Self, String) -> Json
 pub async fn JetStream::streams(Self, offset? : Int32) -> Json
 pub async fn JetStream::update_stream(Self, String, Json) -> Json
@@ -75,11 +115,70 @@ pub(all) struct Metadata {
   pending : Int64
 }
 
+pub struct OrderedReader {
+  // private fields
+}
+pub async fn OrderedReader::close(Self) -> Unit
+pub async fn OrderedReader::next(Self, timeout_ms? : Int32) -> @client.Received
+pub fn OrderedReader::sequence(Self) -> Int64
+
 pub(all) struct PubAck {
   stream : String
   sequence : Int64
   duplicate : Bool
 }
+
+pub struct PublishFuture {
+  // private fields
+}
+pub async fn PublishFuture::wait(Self) -> PubAck
+
+pub struct Publisher {
+  // private fields
+}
+pub fn Publisher::ack_metrics(Self) -> (Int64, Int64)
+pub async fn Publisher::flush(Self) -> Unit
+pub fn Publisher::pending(Self) -> Int32
+pub fn Publisher::pending_bytes(Self) -> Int32
+pub async fn Publisher::publish(Self, String, Bytes, message_id? : String) -> PublishFuture
+
+pub struct PushReader {
+  consumer : Consumer
+  // private fields
+}
+pub async fn PushReader::close(Self) -> Unit
+pub async fn PushReader::next(Self, timeout_ms? : Int32) -> @client.Received
+
+pub(all) enum Retention {
+  Limits
+  Interest
+  WorkQueue
+}
+
+pub(all) enum Storage {
+  File
+  Memory
+}
+
+pub(all) struct StreamConfig {
+  subjects : Array[String]
+  storage : Storage
+  retention : Retention
+  replicas : Int32
+  max_messages : Int64
+  max_bytes : Int64
+  max_age_ms : Int64
+}
+pub fn StreamConfig::new(Array[String], storage? : Storage, retention? : Retention, replicas? : Int32, max_messages? : Int64, max_bytes? : Int64, max_age_ms? : Int64) -> Self
+pub fn StreamConfig::to_json(Self) -> Json raise
+
+pub struct WorkControl {
+  // private fields
+}
+pub fn WorkControl::active(Self) -> Int32
+pub fn WorkControl::completed(Self) -> Int64
+pub fn WorkControl::new() -> Self
+pub fn WorkControl::stop(Self) -> Unit
 
 // Type aliases
 
