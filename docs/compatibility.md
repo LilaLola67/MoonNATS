@@ -28,7 +28,7 @@
 
 ## 当前不覆盖
 
-服务器端实现、集群管理、完整 Push Consumer 封装、跨账户 KV 映射、Object Store 链接对象、自动 JWT 凭据刷新、TLS-first 端口握手及独立安全审计。WSS 使用平台 WebSocket 信任设置；原生 TLS 支持先 INFO 后升级的标准流程。仅 NKey 签名 helper 已与真实服务器验证，JWT 字段与 nonce 签名路径已有实现，尚未在完整 operator/account JWT 部署中测试。
+服务器端实现、集群管理、完整 Push Consumer 封装、跨账户 KV 映射、Object Store 链接对象、自动 JWT 凭据刷新、TLS-first 端口握手及独立安全审计。WSS 使用平台 WebSocket 信任设置；原生 TLS 支持先 INFO 后升级的标准流程。NKey 与完整 operator/account/user JWT 认证已与真实服务器验证；测试凭据由 Node.js 标准加密库独立生成，仅用于本地测试。
 
 Ed25519 依赖包明确说明其实现尚未审计且不保证恒定时间；需要侧信道防护的部署应使用外部签名回调和合适的密钥管理方案。
 

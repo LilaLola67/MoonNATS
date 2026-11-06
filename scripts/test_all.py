@@ -9,7 +9,9 @@ server=Path(args.server).resolve() if args.server else next((root/'.tools/nats-s
 (root/'.tools').mkdir(exist_ok=True);(root/'.test-data').mkdir(exist_ok=True)
 def run(*command):
     subprocess.run([str(x) for x in command],check=True,timeout=90,cwd=root)
-def executable(package): return root/'_build/native/debug/build/cmd'/package/(package+ext)
+def executable(package):
+    # Moon's native backend uses .exe on Linux as well as Windows.
+    return root/'_build/native/debug/build/cmd'/package/(package+'.exe')
 @contextlib.contextmanager
 def serving(name, config):
     path=root/'.tools'/(name+'.local.conf');path.write_text(config,encoding='utf-8')
@@ -50,6 +52,7 @@ public=subprocess.check_output([str(executable('auth_integration')),'--public'],
 with open(root/'.tools/certificate.log','w') as cert_log:
     subprocess.run(['openssl','req','-x509','-newkey','rsa:2048','-nodes','-keyout','.test-data/key.pem','-out','.test-data/cert.pem','-days','2','-subj','/CN=localhost','-addext','subjectAltName=DNS:localhost'],stdout=cert_log,stderr=cert_log,check=True,timeout=30)
 auth='listen: "127.0.0.1:14223"\ntls { cert_file: ".test-data/cert.pem", key_file: ".test-data/key.pem" }\nauthorization { users: [{user: "test-user", password: "synthetic-test-password"}, {nkey: "'+public+'"}] }'
-with serving('auth',auth),serving('token','listen: "127.0.0.1:14224"\nauthorization { token: "synthetic-test-token" }'):
+run('node','scripts/generate_jwt.cjs')
+with serving('jwt',(root/'.tools/jwt.local.conf').read_text()),serving('auth',auth),serving('token','listen: "127.0.0.1:14224"\nauthorization { token: "synthetic-test-token" }'):
     run(executable('auth_integration'))
 print('All real-server integration suites passed')

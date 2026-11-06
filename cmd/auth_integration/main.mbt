@@ -83,7 +83,16 @@ async fn main {
     ),
     c => c.flush(),
   )
+  let jwt = @fs.read_text(".test-data/user.jwt")
+  @client.with_client(
+    @client.Options::new(
+      servers=["nats://127.0.0.1:14227"],
+      signer=key.signer(jwt~),
+      heartbeat_ms=0,
+    ),
+    c => c.flush(),
+  )
   println(
-    "auth: TLS certificate trust, hostname rejection, invalid credentials, user/password, token and NKey nonce authentication PASS",
+    "auth: TLS certificate trust, hostname rejection, invalid credentials, user/password, token, NKey and operator/account JWT nonce authentication PASS",
   )
 }

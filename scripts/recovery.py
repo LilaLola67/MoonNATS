@@ -2,7 +2,7 @@
 import pathlib, subprocess, sys, time, threading, queue, os
 root=pathlib.Path(__file__).resolve().parent.parent
 server_exe=pathlib.Path(sys.argv[1]).resolve()
-client_exe=root/'_build/native/debug/build/cmd/recovery'/('recovery.exe' if os.name=='nt' else 'recovery')
+client_exe=root/'_build/native/debug/build/cmd/recovery'/'recovery.exe'
 server=client=None
 log=open(root/'.tools/recovery-server.log','w')
 def start():
