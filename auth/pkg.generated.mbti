@@ -15,6 +15,13 @@ pub suberror AuthError {
 pub fn AuthError::to_repr(Self) -> @debug.Repr
 
 // Types and methods
+pub struct Credentials {
+  jwt : String
+  key : UserKey
+}
+pub fn Credentials::parse(String) -> Self raise
+pub fn Credentials::signer(Self) -> (String) -> @moonnats.ConnectOptions raise
+
 pub struct UserKey {
   public_key : String
   // private fields

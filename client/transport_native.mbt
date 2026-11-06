@@ -92,6 +92,20 @@ async fn open(
       Tcp(@socket.Tcp::connect_to_host(host, port~))
     }
     errdefer transport.close()
+    if opts.tls_first && !websocket {
+      let (host, _, _) = endpoint(url)
+      guard transport is Tcp(tcp) else { raise Disconnected }
+      transport = Secure(
+        @tls.Tls::client(
+          tcp,
+          host~,
+          trust=match opts.trust {
+            SystemRoots => @tls.SystemRoot
+            CustomPemFile(path) => @tls.CustomPemFile(path)
+          },
+        ),
+      )
+    }
     let decoder = @wire.Decoder::new(max_payload=16777216)
     let mut info : @wire.ServerInfo? = None
     while info is None {
@@ -108,7 +122,7 @@ async fn open(
     guard info is Some(info) else { raise Disconnected }
     if !websocket {
       let (host, _, secure) = endpoint(url)
-      if secure || info.tls_required {
+      if !opts.tls_first && (secure || info.tls_required) {
         guard transport is Tcp(tcp) else { raise Disconnected }
         transport = Secure(
           @tls.Tls::client(
@@ -122,9 +136,13 @@ async fn open(
         )
       }
     }
-    let connect = match (opts.signer, info.nonce) {
-      (Some(signer), Some(nonce)) => signer(nonce)
-      _ => opts.connect
+    let connect = if opts.credentials is Some(provider) {
+      provider(info.nonce)
+    } else {
+      match (opts.signer, info.nonce) {
+        (Some(signer), Some(nonce)) => signer(nonce)
+        _ => opts.connect
+      }
     }
     transport.write(@wire.connect_command(connect) + b"PING\r\n")
     let mut ready = false

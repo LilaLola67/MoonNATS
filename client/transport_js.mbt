@@ -107,9 +107,13 @@ async fn open(
       }
     }
     guard info is Some(info) else { raise Disconnected }
-    let connect = match (opts.signer, info.nonce) {
-      (Some(s), Some(n)) => s(n)
-      _ => opts.connect
+    let connect = if opts.credentials is Some(provider) {
+      provider(info.nonce)
+    } else {
+      match (opts.signer, info.nonce) {
+        (Some(s), Some(n)) => s(n)
+        _ => opts.connect
+      }
     }
     transport.write(@wire.connect_command(connect) + b"PING\r\n")
     let mut ready = false

@@ -14,3 +14,6 @@ application/
 submissions/
 *.docx
 *.pdf
+
+*.creds
+*.jwt

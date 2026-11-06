@@ -39,6 +39,14 @@ pub fn Client::statistics(Self) -> Statistics
 pub async fn Client::subscribe(Self, String, queue? : String, max_messages? : Int32, capacity? : Int32) -> Subscription
 pub async fn Client::unsubscribe(Self, Subscription) -> Unit
 
+pub(all) enum ClientEvent {
+  LameDuck
+  SubscriptionSlow(String)
+  WriteUncertain
+  BufferDiscarded(Int32)
+} derive(@debug.Debug)
+pub fn ClientEvent::to_repr(Self) -> @debug.Repr
+
 pub(all) struct Options {
   servers : Array[String]
   connect : @moonnats.ConnectOptions
@@ -51,8 +59,13 @@ pub(all) struct Options {
   trust : Trust
   on_state : (State) -> Unit
   signer : ((String) -> @moonnats.ConnectOptions raise)?
+  credentials : (async (String?) -> @moonnats.ConnectOptions)?
+  tls_first : Bool
+  reconnect_jitter_ms : Int32
+  reconnect_buffer_bytes : Int32
+  on_event : (ClientEvent) -> Unit
 }
-pub fn Options::new(servers? : Array[String], connect? : @moonnats.ConnectOptions, timeout_ms? : Int32, reconnect_attempts? : Int32, reconnect_delay_ms? : Int32, heartbeat_ms? : Int32, max_pending_bytes? : Int32, subscription_capacity? : Int32, trust? : Trust, on_state? : (State) -> Unit, signer? : (String) -> @moonnats.ConnectOptions raise) -> Self
+pub fn Options::new(servers? : Array[String], connect? : @moonnats.ConnectOptions, timeout_ms? : Int32, reconnect_attempts? : Int32, reconnect_delay_ms? : Int32, heartbeat_ms? : Int32, max_pending_bytes? : Int32, subscription_capacity? : Int32, trust? : Trust, on_state? : (State) -> Unit, signer? : (String) -> @moonnats.ConnectOptions raise, credentials? : async (String?) -> @moonnats.ConnectOptions, tls_first? : Bool, reconnect_jitter_ms? : Int32, reconnect_buffer_bytes? : Int32, on_event? : (ClientEvent) -> Unit) -> Self
 
 pub(all) struct Received {
   subject : String
@@ -81,7 +94,12 @@ pub(all) struct Statistics {
   pending_bytes : Int32
   subscriptions : Int32
   slow_consumers : Int64
+  buffered_bytes : Int32
+  requests : Int64
+  request_errors : Int64
+  request_time_ms : Int64
 }
+pub fn Statistics::prometheus(Self) -> String
 
 pub struct Subscription {
   sid : Int32
