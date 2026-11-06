@@ -1,8 +1,8 @@
 ///|
 let usage : String =
-  #|MoonNATS 0.2.0
+  #|MoonNATS 0.3.0
   #|Usage: moonnats COMMAND [ARGS]
-  #|  info | stats
+  #|  info | stats | metrics | account-info
   #|  pub SUBJECT TEXT | request SUBJECT TEXT | sub SUBJECT [COUNT]
   #|  stream-create NAME SUBJECT | stream-info NAME
   #|  consumer-create STREAM NAME SUBJECT | fetch STREAM NAME [COUNT]
@@ -10,7 +10,7 @@ let usage : String =
   #|  object-create BUCKET | object-put BUCKET NAME FILE
   #|  object-get BUCKET NAME OUTPUT | object-list BUCKET
   #|Environment: MOONNATS_URL, MOONNATS_USER, MOONNATS_PASSWORD,
-  #|MOONNATS_TOKEN, MOONNATS_NKEY_SEED, MOONNATS_JWT, MOONNATS_CA.
+  #|MOONNATS_TOKEN, MOONNATS_NKEY_SEED, MOONNATS_JWT, MOONNATS_CA, MOONNATS_CREDS, MOONNATS_TLS_FIRST.
   #|fetch displays messages without acknowledging them.
   #|object-get refuses to overwrite an existing output.
 
@@ -34,6 +34,28 @@ fn options() -> @client.Options raise {
     Some(path) => @client.CustomPemFile(path)
     None => @client.SystemRoots
   }
+  let credentials : (async (String?) -> @wire.ConnectOptions)? = match
+    @env.get_env_var("MOONNATS_CREDS") {
+    Some(path) =>
+      Some(nonce => {
+        guard nonce is Some(nonce) else {
+          raise @client.InvalidOption(
+            "server did not supply nonce for creds authentication",
+          )
+        }
+        let creds = @auth.Credentials::parse(@fs.read_text(path))
+        creds.key.sign_nonce(nonce, jwt=creds.jwt)
+      })
+    None => None
+  }
+  let tls_first = match @env.get_env_var("MOONNATS_TLS_FIRST") {
+    Some("1") | Some("true") => true
+    None | Some("0") | Some("false") => false
+    _ =>
+      raise @client.InvalidOption(
+        "MOONNATS_TLS_FIRST must be true, false, 1 or 0",
+      )
+  }
   @client.Options::new(
     servers=@env.get_env_var("MOONNATS_URL")
       .unwrap_or("nats://127.0.0.1:4222")
@@ -43,6 +65,8 @@ fn options() -> @client.Options raise {
     connect~,
     trust~,
     signer?,
+    credentials?,
+    tls_first~,
   )
 }
 
@@ -65,6 +89,8 @@ async fn run(args : Array[String]) -> Unit {
     let js = @js.JetStream::new(c)
     match args {
       ["info"] => println(c.info.raw.stringify())
+      ["metrics"] => println(c.statistics().prometheus())
+      ["account-info"] => println(js.account_info().stringify())
       ["stats"] => {
         let s = c.statistics()
         println(
