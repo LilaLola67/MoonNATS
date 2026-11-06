@@ -1,0 +1,28 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "LilaLola67/moonnats/typed"
+
+import {
+  "LilaLola67/moonnats/client",
+  "moonbitlang/core/json",
+}
+
+// Values
+pub fn[T : ToJson + @json.FromJson] json_codec() -> Codec[T]
+
+pub async fn[T] next(@client.Subscription, Codec[T], timeout_ms? : Int32) -> T
+
+pub async fn[T] publish(@client.Client, String, T, Codec[T]) -> Unit
+
+pub async fn[Request, Response] request(@client.Client, String, Request, Codec[Request], Codec[Response], timeout_ms? : Int32) -> Response
+
+// Errors
+
+// Types and methods
+pub(all) struct Codec[T] {
+  encode : (T) -> Bytes raise
+  decode : (Bytes) -> T raise
+}
+
+// Type aliases
+
+// Traits
