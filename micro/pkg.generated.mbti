@@ -1,0 +1,39 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "LilaLola67/moonnats/micro"
+
+import {
+  "LilaLola67/moonnats",
+  "LilaLola67/moonnats/client",
+}
+
+// Values
+pub async fn[X] with_service(@client.Client, String, String, Array[Endpoint], async (Service) -> X, metadata? : Json) -> X
+
+// Errors
+
+// Types and methods
+pub struct Endpoint {
+  name : String
+  subject : String
+  // private fields
+}
+pub fn Endpoint::new(String, String, async (@client.Received) -> Response, queue? : String) -> Self
+
+pub struct Response {
+  // private fields
+}
+pub fn Response::error(Int32, String, payload? : Bytes) -> Self raise
+pub fn Response::ok(Bytes, headers? : @moonnats.Headers) -> Self
+
+pub struct Service {
+  name : String
+  id : String
+  version : String
+  // private fields
+}
+pub fn Service::info(Self, operation? : String) -> Json
+pub fn Service::stop(Self) -> Unit
+
+// Type aliases
+
+// Traits

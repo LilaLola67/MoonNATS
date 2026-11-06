@@ -1,0 +1,10 @@
+import {
+  "LilaLola67/moonnats/client",
+  "LilaLola67/moonnats" @wire,
+  "moonbitlang/core/async",
+  "moonbitlang/core/encoding/utf8",
+  "moonbitlang/core/env",
+  "moonbitlang/x/time",
+}
+
+supported_targets = "+native+js"
