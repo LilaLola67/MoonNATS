@@ -1,0 +1,11 @@
+import {
+  "LilaLola67/moonnats/auth",
+  "LilaLola67/moonnats/client",
+  "LilaLola67/moonnats" @wire,
+  "moonbitlang/core/async",
+  "moonbitlang/core/env",
+}
+
+pkgtype(kind: "executable")
+
+supported_targets = "+native"

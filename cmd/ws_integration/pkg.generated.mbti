@@ -1,0 +1,17 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "LilaLola67/moonnats/cmd/ws_integration"
+
+import {
+  "moonbitlang/core/json",
+}
+
+// Values
+
+// Errors
+
+// Types and methods
+type Payload derive(ToJson, @json.FromJson)
+
+// Type aliases
+
+// Traits

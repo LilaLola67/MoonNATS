@@ -1,0 +1,13 @@
+import {
+  "LilaLola67/moonnats/client",
+  "LilaLola67/moonnats/typed",
+  "moonbitlang/core/json",
+}
+
+pkgtype(kind: "executable")
+
+supported_targets = "+native+js"
+
+import {
+  "moonbitlang/core/async",
+}
