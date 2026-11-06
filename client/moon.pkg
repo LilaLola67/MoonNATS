@@ -1,0 +1,15 @@
+import {
+  "LilaLola67/moonnats" @wire,
+  "moonbitlang/async",
+  "moonbitlang/async/socket",
+  "moonbitlang/async/tls",
+  "moonbitlang/async/websocket" @ws,
+  "moonbitlang/async/aqueue",
+  "moonbitlang/core/debug",
+}
+
+supported_targets = "+native"
+
+import {
+  "moonbitlang/core/string",
+}

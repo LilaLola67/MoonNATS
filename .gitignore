@@ -14,3 +14,9 @@ submissions/
 *.pdf
 AGENTS.md
 .githooks/
+
+.tools/
+.test-data/
+.integration/
+*.local.conf
+
