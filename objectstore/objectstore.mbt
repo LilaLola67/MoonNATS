@@ -203,7 +203,25 @@ pub async fn Bucket::get_to(
   name : String,
   sink : async (Bytes) -> Unit,
 ) -> ObjectInfo {
+  self.get_to_depth(name, sink, 0)
+}
+
+///|
+async fn Bucket::get_to_depth(
+  self : Bucket,
+  name : String,
+  sink : async (Bytes) -> Unit,
+  depth : Int32,
+) -> ObjectInfo {
+  guard depth < 16 else {
+    raise @js.Invalid("object link cycle or depth limit")
+  }
   let info = self.get_info(name)
+  if !info.deleted && info.raw is { "options": { "link": link, .. }, .. } {
+    let bucket = open(self.js, @js.text_field(link, "bucket"))
+    let target = @js.text_field(link, "name")
+    return bucket.get_to_depth(target, sink, depth + 1)
+  }
   guard !info.deleted else { raise @js.Invalid("object deleted") }
   guard info.size >= 0L && info.chunks >= 0 && info.chunks <= 10000000 else {
     raise @js.Invalid("object limits")

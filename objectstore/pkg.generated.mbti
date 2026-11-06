@@ -17,14 +17,21 @@ pub struct Bucket {
   js : @jetstream.JetStream
   name : String
 }
+pub async fn Bucket::add_bucket_link(Self, String, String) -> ObjectInfo
+pub async fn Bucket::add_link(Self, String, String, String) -> ObjectInfo
 pub async fn Bucket::delete(Self, String) -> Unit
 pub async fn Bucket::destroy(Self) -> Unit
 pub async fn Bucket::get(Self, String, max_bytes? : Int32) -> Bytes
 pub async fn Bucket::get_info(Self, String) -> ObjectInfo
 pub async fn Bucket::get_to(Self, String, async (Bytes) -> Unit) -> ObjectInfo
+pub async fn Bucket::linked_bucket(Self, String) -> Self
 pub async fn Bucket::list(Self) -> Array[ObjectInfo]
 pub async fn Bucket::put(Self, String, Bytes, chunk_size? : Int32) -> ObjectInfo
 pub async fn Bucket::put_stream(Self, String, async () -> Bytes?, chunk_size? : Int32, description? : String) -> ObjectInfo
+pub async fn Bucket::seal(Self) -> Unit
+pub async fn Bucket::status(Self) -> Json
+pub async fn Bucket::update_metadata(Self, String, String, metadata? : Json) -> ObjectInfo
+pub async fn Bucket::watch(Self, updates_only? : Bool) -> Watch
 
 pub(all) struct ObjectInfo {
   name : String
@@ -36,6 +43,12 @@ pub(all) struct ObjectInfo {
   deleted : Bool
   raw : Json
 }
+
+pub struct Watch {
+  // private fields
+}
+pub async fn Watch::close(Self) -> Unit
+pub async fn Watch::next(Self, timeout_ms? : Int32) -> ObjectInfo
 
 // Type aliases
 

@@ -18,6 +18,7 @@ pub struct Bucket {
   js : @jetstream.JetStream
   name : String
 }
+pub async fn Bucket::config_cache(Self, pattern? : String, max_keys? : Int32) -> ConfigCache
 pub async fn Bucket::create(Self, String, Bytes) -> Int64
 pub async fn Bucket::delete(Self, String, purge? : Bool, expected_revision? : Int64) -> Int64
 pub async fn Bucket::destroy(Self) -> Unit
@@ -26,6 +27,20 @@ pub async fn Bucket::history(Self, String) -> Array[Entry]
 pub async fn Bucket::put(Self, String, Bytes, expected_revision? : Int64) -> Int64
 pub async fn Bucket::update(Self, String, Bytes, Int64) -> Int64
 pub async fn Bucket::watch(Self, pattern? : String, updates_only? : Bool) -> Watch
+
+pub(all) enum CacheEvent {
+  Snapshot(Array[Entry])
+  Updated(Entry)
+}
+
+pub struct ConfigCache {
+  // private fields
+}
+pub async fn ConfigCache::close(Self) -> Unit
+pub fn ConfigCache::get(Self, String) -> Entry?
+pub async fn ConfigCache::next(Self, timeout_ms? : Int32) -> CacheEvent
+pub fn ConfigCache::ready(Self) -> Bool
+pub fn ConfigCache::snapshot(Self) -> Array[Entry] raise
 
 pub(all) struct Entry {
   bucket : String
