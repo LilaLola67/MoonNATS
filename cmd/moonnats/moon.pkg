@@ -1,0 +1,20 @@
+import {
+  "LilaLola67/moonnats/client",
+  "LilaLola67/moonnats/auth",
+  "LilaLola67/moonnats" @wire,
+  "LilaLola67/moonnats/jetstream" @js,
+  "LilaLola67/moonnats/kv",
+  "LilaLola67/moonnats/objectstore" @objects,
+  "moonbitlang/core/async",
+  "moonbitlang/core/async/fs",
+  "moonbitlang/core/async/stdio",
+  "moonbitlang/core/env",
+  "moonbitlang/core/encoding/utf8",
+  "moonbitlang/core/encoding/base64",
+  "moonbitlang/core/string",
+  "moonbitlang/x/sys",
+}
+
+pkgtype(kind: "executable")
+
+supported_targets = "+native"
