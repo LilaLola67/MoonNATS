@@ -9,7 +9,7 @@ async fn main {
             servers=["tls://localhost:14230", "nats://127.0.0.1:14231"],
             require_tls=true,
             heartbeat_ms=50,
-            timeout_ms=300,
+            timeout_ms=2000,
             reconnect_attempts=2,
             reconnect_delay_ms=20,
             reconnect_jitter_ms=0,

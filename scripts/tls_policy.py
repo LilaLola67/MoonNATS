@@ -32,8 +32,9 @@ def main(server_binary):
             lines = queue.Queue()
             reader = threading.Thread(target=lambda: lines.put(client.stderr.readline()), daemon=True)
             reader.start()
-            if lines.get(timeout=8).strip() != "TLS_READY":
-                raise RuntimeError("TLS client did not finish its secure handshake")
+            first_line = lines.get(timeout=8).strip()
+            if first_line != "TLS_READY":
+                raise RuntimeError(f"TLS handshake readiness failed: {first_line or 'client exited'}")
             server.terminate()
             server.wait(timeout=5)
             if client.wait(timeout=8) != 0:
