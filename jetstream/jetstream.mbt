@@ -362,9 +362,13 @@ pub async fn Consumer::fetch(
     raise Invalid("fetch limits")
   }
   let c = self.js.client
-  let sub = c.subscribe(c.new_inbox(), capacity=batch + 16)
+  let sub = c.subscribe(c.new_inbox(), capacity=batch + 16, restore=false)
   let inbox = sub.subject
-  defer @async.protect_from_cancel(() => c.unsubscribe(sub) catch { _ => () })
+  defer @async.protect_from_cancel(() => {
+    @async.with_timeout(250, () => c.unsubscribe(sub)) catch {
+      _ => ()
+    }
+  })
   let data : Map[String, Json] = {
     "batch": Json(batch),
     "expires": integer(expires_ms.to_int64() * 1000000L),
@@ -459,6 +463,6 @@ pub async fn acknowledge(
   if sync {
     ignore(client.request(subject, @utf8.encode(body)))
   } else {
-    client.publish(subject, @utf8.encode(body))
+    client.publish(subject, @utf8.encode(body), buffer_on_reconnect=false)
   }
 }

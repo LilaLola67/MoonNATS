@@ -41,23 +41,53 @@ pub async fn Consumer::consume(
   concurrency~ : Int32 = 1,
   ack_mode~ : AckMode = Manual,
   poll_ms~ : Int32 = 250,
+  recovery_timeout_ms~ : Int32 = 30000,
+  progress_ms~ : Int32 = 0,
 ) -> Unit {
-  guard concurrency > 0 && concurrency <= 256 && poll_ms > 0 && poll_ms <= 1000 else {
+  guard concurrency > 0 &&
+    concurrency <= 256 &&
+    poll_ms > 0 &&
+    poll_ms <= 1000 &&
+    recovery_timeout_ms >= 0 &&
+    progress_ms >= 0 else {
     raise Invalid("worker limits")
+  }
+  guard progress_ms == 0 || ack_mode is OnSuccess else {
+    raise Invalid("automatic progress requires OnSuccess")
   }
   @async.with_task_group(group => {
     for _ in 0..<concurrency {
       group.spawn_bg(() => {
         while !control.stopped {
-          let batch = self.fetch(expires_ms=poll_ms)
+          let batch = self.worker_fetch(control, poll_ms, recovery_timeout_ms)
           for msg in batch {
             control.active += 1
             defer {
               control.active -= 1
             }
-            handler(msg)
+            if progress_ms == 0 {
+              handler(msg)
+            } else {
+              @async.with_task_group(handler_group => {
+                let progress = handler_group.spawn(no_wait=true, () => {
+                  while true {
+                    @async.sleep(progress_ms)
+                    acknowledge(self.js.client, msg, kind="progress") catch {
+                      @client.Disconnected | @client.PublishUncertain => ()
+                      e => raise e
+                    }
+                  }
+                })
+                defer progress.cancel()
+                handler(msg)
+              })
+            }
             if ack_mode is OnSuccess {
-              acknowledge(self.js.client, msg)
+              acknowledge(self.js.client, msg) catch {
+                @client.Disconnected | @client.PublishUncertain if recovery_timeout_ms >
+                  0 => continue
+                e => raise e
+              }
             }
             control.completed += 1L
           }
@@ -65,4 +95,38 @@ pub async fn Consumer::consume(
       })
     }
   })
+}
+
+///|
+async fn Consumer::worker_fetch(
+  self : Consumer,
+  control : WorkControl,
+  poll_ms : Int32,
+  recovery_timeout_ms : Int32,
+) -> Array[@client.Received] {
+  @async.with_timeout(poll_ms + 1500, () => self.fetch(expires_ms=poll_ms)) catch {
+    @client.Disconnected | @client.PublishUncertain | @async.TimeoutError if recovery_timeout_ms >
+      0 =>
+      @async.with_timeout(recovery_timeout_ms, () => {
+        while !control.stopped {
+          self.js.client.wait_connected(timeout_ms=100) catch {
+            @async.TimeoutError => continue
+            e => raise e
+          }
+          if control.stopped {
+            break
+          }
+          try self.fetch(expires_ms=poll_ms) catch {
+            @client.Disconnected
+            | @client.PublishUncertain
+            | @async.TimeoutError => @async.sleep(25)
+            e => raise e
+          } noraise {
+            batch => return batch
+          }
+        }
+        []
+      })
+    e => raise e
+  }
 }

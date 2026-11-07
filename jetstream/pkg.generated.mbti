@@ -60,7 +60,7 @@ pub struct Consumer {
   stream : String
   name : String
 }
-pub async fn Consumer::consume(Self, WorkControl, async (@client.Received) -> Unit, concurrency? : Int32, ack_mode? : AckMode, poll_ms? : Int32) -> Unit
+pub async fn Consumer::consume(Self, WorkControl, async (@client.Received) -> Unit, concurrency? : Int32, ack_mode? : AckMode, poll_ms? : Int32, recovery_timeout_ms? : Int32, progress_ms? : Int32) -> Unit
 pub async fn Consumer::delete(Self) -> Unit
 pub async fn Consumer::fetch(Self, batch? : Int32, expires_ms? : Int32, max_bytes? : Int32) -> Array[@client.Received]
 pub async fn Consumer::info(Self) -> Json
