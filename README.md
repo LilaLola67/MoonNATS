@@ -13,15 +13,15 @@ MoonBit 原生 NATS 客户端，提供异步消息通信、JetStream 持久消�
 | NATS Core | 普通/通配符/队列组订阅、自动退订、请求响应、无响应者错误、超时取消、Flush、Drain |
 | 流量控制 | 有界待发送字节预算、订阅队列和字节预算、慢消费者错误、连接状态回调、统计信息 |
 | 认证 | 用户密码、Token、NKey seed、JWT + nonce 签名；TLS 默认验证证书和主机名，可配置自定义 CA、TLS-first、标准 .creds 与连接时动态凭据 |
-| JetStream | Stream/Consumer 创建、查询、更新、删除与列表；发布确认、消息 ID 去重、预期版本条件；Pull Consumer、批量拉取、ACK/NAK/延迟 NAK/WPI/TERM、同步 ACK、消息元数据、断线续跑的 Worker、并发发布、Push/Ordered Reader、类型化配置和全分页列表 |
+| JetStream | Stream/Consumer 创建、查询、更新、删除与列表；发布确认、消息 ID 去重、预期版本条件；Pull Consumer、批量拉取、ACK/NAK/延迟 NAK/WPI/TERM、同步 ACK、消息元数据、有界预取、逐条处理结果与确认式 ACK 的 Worker、去重窗口内的发布重试、并发发布、Push/Ordered Reader、类型化配置和全分页列表 |
 | KV | 读写、创建、版本条件更新、历史、删除/清理标记、删除后重建、当前值与增量 Watch、带初始快照完成信号与重连重同步及 TTL 到期过滤的配置缓存 |
 | Object Store | 流式分块上传/下载、元数据、对象覆盖、列举、删除、SHA-256 校验、有界内存读取、元数据 Watch/更新、对象与 Bucket 链接、封存 |
 | 标准微服务 | Endpoint、队列组、标准错误响应、PING/INFO/STATS 发现与统计、停止收尾 |
-| 类型与工具 | 可自定义 Codec、类型化 JSON 发布/请求/订阅、原生诊断 CLI、五个最小使用示例与浏览器示例、Prometheus 文本指标、可复现基准 |
+| 类型与工具 | 可自定义 Codec、类型化 JSON 发布/请求/订阅、原生诊断 CLI、六个使用示例与浏览器示例、Prometheus 文本指标、可复现基准 |
 
 协议与认证包支持 native、JS、wasm、wasm-gc。客户端及上层消息 API 支持 native 和 JS；JS 使用浏览器标准 WebSocket API，原生支持 TCP、TLS、WebSocket。CLI 为 native。
 
-当前版本 0.3.3，API 仍可能调整。尚未发布到 Mooncakes；仓库中的模块坐标为 `LilaLola67/moonnats`。
+当前版本 0.3.4，API 仍可能调整。尚未发布到 Mooncakes；仓库中的模块坐标为 `LilaLola67/moonnats`。
 
 ## 从源码运行
 
@@ -45,6 +45,7 @@ nats-server -a 127.0.0.1 -p 4222 -js
 moon run examples/pubsub
 moon run examples/request_reply
 moon run examples/tasks
+moon run examples/reliable_tasks
 ```
 
 示例默认连接 `nats://127.0.0.1:4222`，也可设置 `MOONNATS_URL`。

@@ -133,11 +133,13 @@ async fn job_load(
           stream_name, durable,
         )
         group.spawn_bg(() => {
-          worker.consume(
+          worker.consume_reliably(
             controls[i],
             concurrency=4,
+            prefetch=32,
+            prefetch_bytes=65536,
             recovery_timeout_ms=20000,
-            msg => {
+            (msg, _) => {
               let id = payload_id(msg.payload)
               guard id >= begin && id < begin + total && !seen[id - begin] else {
                 raise @js.Invalid(
@@ -146,11 +148,6 @@ async fn job_load(
               }
               assert_eq(msg.payload, payload(id))
               seen[id - begin] = true
-              @js.acknowledge(connection, msg, sync=true) catch {
-                @client.NoResponders =>
-                  raise @js.Invalid(phase + ": worker ACK had no responder")
-                e => raise e
-              }
               delivered[i] += 1
               done += 1
               if done == total {
@@ -158,6 +155,7 @@ async fn job_load(
                   control.stop()
                 }
               }
+              @js.Confirm
             },
           )
         })
@@ -186,6 +184,8 @@ async fn job_load(
     })
   })
   assert_eq(done, total)
+  assert_eq(controls[0].completed() + controls[1].completed(), total.to_int64())
+  assert_eq(controls[0].uncertain() + controls[1].uncertain(), 0L)
   assert_true(delivered[0] > 0 && delivered[1] > 0)
   let status = js.consumer(stream_name, durable).info()
   assert_eq(@js.integer_field(status, "num_pending"), 0L)
@@ -211,24 +211,25 @@ async fn leader_loss(client : @client.Client) -> Unit {
   let mut delivery_count = 0L
   ignore(js.publish(jobs, b"in-flight", message_id="in-flight"))
   @async.with_timeout(35000, () => {
-    worker.consume(control, recovery_timeout_ms=20000, msg => {
+    worker.consume_reliably(control, recovery_timeout_ms=20000, (msg, meta) => {
       assert_eq(msg.payload, b"in-flight")
-      let meta = @js.metadata(msg)
       if first_sequence == 0L {
         first_sequence = meta.stream_sequence
         @stdio.stderr.text.write("STOP_STREAM_LEADER\n")
         while client.statistics().reconnects == 0L {
           @async.sleep(10)
         }
+        @js.RetryAfter(50)
       } else {
         assert_eq(meta.stream_sequence, first_sequence)
         assert_true(meta.deliveries >= 2L)
         delivery_count = meta.deliveries
-        @js.acknowledge(client, msg, sync=true)
         control.stop()
+        @js.Confirm
       }
     })
   })
+  assert_eq(control.completed(), 1L)
   client.publish(sub.subject, b"restored")
   client.flush()
   assert_eq(sub.next().payload, b"restored")

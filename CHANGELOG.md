@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.4
+
+- Add opt-in JetStream publish retries bounded by the target stream's deduplication window. Report unknown publish outcomes when confirmation remains unavailable.
+- Add bounded pull workers with confirmed ACK, delayed retry and termination outcomes, uncertainty reporting and a cooperative drain deadline.
+- Demonstrate idempotent task processing with a persistent KV receipt. Verify lost publish and ACK replies, byte limits, drain redelivery and worker recovery on a real three-node cluster.
+
 ## 0.3.3
 
 - Report subject permission errors as events and close only the affected subscriptions.

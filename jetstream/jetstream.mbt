@@ -4,6 +4,9 @@ pub(all) suberror JetStreamError {
   Invalid(String)
   Status(Int32, String)
   Missing(String)
+  PublishDeadlineExceeded
+  PublishOutcomeUnknown(String, String)
+  WorkerDrainTimedOut
 } derive(Debug)
 
 ///|
@@ -230,6 +233,7 @@ pub async fn JetStream::publish(
   expected_last_sequence? : Int64,
   expected_last_subject_sequence? : Int64,
   headers~ : @wire.Headers = @wire.Headers::new(),
+  timeout_ms? : Int32,
 ) -> PubAck {
   let entries = headers.entries.copy()
   for
@@ -255,6 +259,7 @@ pub async fn JetStream::publish(
     subject,
     payload,
     headers=@wire.Headers::new(entries~),
+    timeout_ms?,
   )
   let j = check_response(decode_json(msg.payload))
   {
@@ -393,6 +398,9 @@ pub async fn Consumer::fetch(
     match msg.headers.status {
       Some(100) => ()
       Some(404) | Some(408) => break
+      Some(409) if msg.headers.description == "Batch Completed" => break
+      Some(409) if !out.is_empty() &&
+        msg.headers.description == "Message Size Exceeds MaxBytes" => break
       Some(code) => raise Status(code, msg.headers.description)
       None => out.push(msg)
     }
@@ -440,6 +448,7 @@ pub async fn acknowledge(
   kind~ : String = "ack",
   delay_ms~ : Int32 = 0,
   sync~ : Bool = false,
+  timeout_ms? : Int32,
 ) -> Unit {
   guard message.reply_to is Some(subject) && subject.has_prefix("$JS.ACK.") else {
     raise Invalid("missing ACK reply subject")
@@ -461,7 +470,10 @@ pub async fn acknowledge(
     _ => raise Invalid("ACK kind")
   }
   if sync {
-    ignore(client.request(subject, @utf8.encode(body)))
+    let response = client.request(subject, @utf8.encode(body), timeout_ms?)
+    if response.headers.status is Some(code) && code >= 300 {
+      raise Status(code, response.headers.description)
+    }
   } else {
     client.publish(subject, @utf8.encode(body), buffer_on_reconnect=false)
   }

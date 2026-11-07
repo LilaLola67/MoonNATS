@@ -1,6 +1,10 @@
 ///|
 async fn main {
   let args = @env.args()
+  if args.contains("--jetstream") {
+    jetstream_fault_case()
+    return
+  }
   if args.contains("--permissions") {
     permissions_case()
     return

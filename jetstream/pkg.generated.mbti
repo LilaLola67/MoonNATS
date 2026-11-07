@@ -8,7 +8,7 @@ import {
 }
 
 // Values
-pub async fn acknowledge(@client.Client, @client.Received, kind? : String, delay_ms? : Int32, sync? : Bool) -> Unit
+pub async fn acknowledge(@client.Client, @client.Received, kind? : String, delay_ms? : Int32, sync? : Bool, timeout_ms? : Int32) -> Unit
 
 pub fn check_response(Json) -> Json raise JetStreamError
 
@@ -32,6 +32,9 @@ pub(all) suberror JetStreamError {
   Invalid(String)
   Status(Int32, String)
   Missing(String)
+  PublishDeadlineExceeded
+  PublishOutcomeUnknown(String, String)
+  WorkerDrainTimedOut
 } derive(@debug.Debug)
 pub fn JetStreamError::to_repr(Self) -> @debug.Repr
 
@@ -61,6 +64,7 @@ pub struct Consumer {
   name : String
 }
 pub async fn Consumer::consume(Self, WorkControl, async (@client.Received) -> Unit, concurrency? : Int32, ack_mode? : AckMode, poll_ms? : Int32, recovery_timeout_ms? : Int32, progress_ms? : Int32) -> Unit
+pub async fn Consumer::consume_reliably(Self, WorkControl, async (@client.Received, Metadata) -> WorkOutcome, concurrency? : Int32, prefetch? : Int32, prefetch_bytes? : Int32, poll_ms? : Int32, recovery_timeout_ms? : Int32, progress_ms? : Int32, ack_timeout_ms? : Int32, drain_timeout_ms? : Int32, on_uncertain? : (UncertainDisposition) -> Unit) -> Unit
 pub async fn Consumer::delete(Self) -> Unit
 pub async fn Consumer::fetch(Self, batch? : Int32, expires_ms? : Int32, max_bytes? : Int32) -> Array[@client.Received]
 pub async fn Consumer::info(Self) -> Json
@@ -98,7 +102,8 @@ pub async fn JetStream::delete_stream(Self, String) -> Unit
 pub async fn JetStream::get_message(Self, String, String, sequence? : Int64) -> Json
 pub fn JetStream::new(@client.Client, domain? : String) -> Self raise JetStreamError
 pub async fn JetStream::ordered_consumer(Self, String, filter? : String, start_sequence? : Int64) -> OrderedReader
-pub async fn JetStream::publish(Self, String, Bytes, message_id? : String, expected_stream? : String, expected_last_sequence? : Int64, expected_last_subject_sequence? : Int64, headers? : @moonnats.Headers) -> PubAck
+pub async fn JetStream::publish(Self, String, Bytes, message_id? : String, expected_stream? : String, expected_last_sequence? : Int64, expected_last_subject_sequence? : Int64, headers? : @moonnats.Headers, timeout_ms? : Int32) -> PubAck
+pub async fn JetStream::publish_reliably(Self, String, Bytes, message_id~ : String, expected_stream~ : String, timeout_ms? : Int32, attempt_timeout_ms? : Int32, retry_delay_ms? : Int32) -> PubAck
 pub async fn JetStream::purge_stream(Self, String, filter? : String) -> Unit
 pub async fn JetStream::push_consumer(Self, String, String, filter? : String, heartbeat_ms? : Int32, ack_policy? : AckPolicy, deliver_policy? : String) -> PushReader
 pub async fn JetStream::stream_info(Self, String) -> Json
@@ -172,6 +177,12 @@ pub(all) struct StreamConfig {
 pub fn StreamConfig::new(Array[String], storage? : Storage, retention? : Retention, replicas? : Int32, max_messages? : Int64, max_bytes? : Int64, max_age_ms? : Int64) -> Self
 pub fn StreamConfig::to_json(Self) -> Json raise
 
+pub(all) struct UncertainDisposition {
+  message : Metadata
+  outcome : WorkOutcome
+  cause : Error
+}
+
 pub struct WorkControl {
   // private fields
 }
@@ -179,6 +190,13 @@ pub fn WorkControl::active(Self) -> Int32
 pub fn WorkControl::completed(Self) -> Int64
 pub fn WorkControl::new() -> Self
 pub fn WorkControl::stop(Self) -> Unit
+pub fn WorkControl::uncertain(Self) -> Int64
+
+pub(all) enum WorkOutcome {
+  Confirm
+  RetryAfter(Int32)
+  Terminate
+}
 
 // Type aliases
 

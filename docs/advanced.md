@@ -109,3 +109,13 @@ let options = @client.Options::new(
 ## 分页与容量
 
 `all_streams()` 与 `all_consumers(stream)` 遍历所有页；原有 `streams(offset~)`、`consumers(offset~)` 保留。`account_usage()` 返回精确 Int64 的内存、存储、Stream/Consumer 数量，以及服务器原始 limits。类型化 StreamConfig/ConsumerConfig 对常用参数和时间单位做校验；不常用配置仍可使用原始 JSON 接口。
+
+## 持久任务的发布与处理
+
+`moon run examples/reliable_tasks` 需要启用 JetStream 的本地 NATS。示例先写入持久 KV 回执，再主动让任务重投。第二次处理用同一订单 ID 核对已有回执，最后等待服务端确认 ACK。回执本身就是示例的业务写入。如果业务写入发生在数据库中，幂等检查应与业务变更使用同一事务。
+
+- `JetStream::publish_reliably` 需要稳定的 `message_id` 和 `expected_stream`。同一 Stream 内，每个 ID 对应一份固定内容。客户端查询 Stream 的 `duplicate_window`，要求总重试预算短于该窗口，并用同一 ID 重试短暂失败。返回的 `PubAck.duplicate` 表明服务端识别到重复发布。已尝试发送且结果仍不明确时，返回 `PublishOutcomeUnknown(stream, message_id)`。发送端应保留该业务 ID，用于核对结果。
+- `Consumer::consume_reliably` 绑定显式 ACK 的 Pull Consumer。处理器返回 `Confirm` 等待服务端确认 ACK，返回 `RetryAfter(ms)` 请求延迟重投，返回 `Terminate` 请求结束该消息在当前 Consumer 上的投递。处理器抛出的异常仍会结束本次消费。
+- 使用 `on_uncertain` 获取确认结果不明确的投递元数据和原因。受管消费的 `completed()` 统计得到服务端确认的成功 ACK，`uncertain()` 统计结果不明确的处置。NAK 和 TERM 采用协议的单向发送语义。
+- `prefetch` 和 `prefetch_bytes` 是单次消费调用的总预算，按并发 Worker 分配，各 Worker 处理完本批后再拉下一批。每个 Worker 的字节预算需要容纳最大消息及其协议开销。`poll_ms` 控制未填满的批次等待多久。预取的消息已进入服务端 ACK 计时，按处理速度、`AckWait` 和 `MaxAckPending` 选择批次。
+- `WorkControl::stop()` 停止新拉取和新处理，已启动的处理和处置可以在 `drain_timeout_ms` 内结束。截止时间到达时请求协作取消，并返回 `WorkerDrainTimedOut`。本地预取后尚未开始处理的消息保留为未确认，由服务端的投递策略决定何时重投。处理器需要在可取消的异步操作处让出控制权。

@@ -76,3 +76,9 @@ moon run cmd/benchmark --target native
 ## Core 异常路径回归
 
 `scripts/test_all.py` 使用真实 NATS Server 验证受限账号的发布和队列订阅拒绝，并确认合法订阅仍在原连接收消息。双节点测试在主节点退出后切换到载荷上限为 64 字节、禁用 Headers 的节点，验证缓存拒绝事件及兼容消息的发送顺序。协议测试对端延迟旧连接的 PONG，验证等待 Flush 锁的期限及重连后的 PONG 隔离。
+
+## 持久任务回执故障
+
+`scripts/test_all.py` 通过协议代理丢弃真实服务器发出的首个 PubAck、一个 ACK 确认和另一条任务的全部 PubAck。MoonBit 客户端分别核对重复 PubAck、结果不确定事件和发布预算耗尽。测试还用只能放下一条消息的字节预算完成多条任务，并让一个已开始的任务超过停机期限。独立 nats-py 客户端核对实际存储条数、ACK 进度和停机后的重投次数。
+
+`scripts/test_cluster.py` 用受管 Worker 处理两个阶段共 12,000 条三副本任务，在处理期间停掉 Stream 领导节点，并校验重投、确认进度以及三个副本追平后的状态。

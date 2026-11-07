@@ -1,4 +1,5 @@
 import {
+  "LilaLola67/moonnats/jetstream" @js,
   "LilaLola67/moonnats" @wire,
   "moonbitlang/core/env",
   "LilaLola67/moonnats/client",

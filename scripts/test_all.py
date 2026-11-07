@@ -36,6 +36,7 @@ with serving('test',config):
     run(executable('integration'))
     run(executable('extended_integration'))
     run(sys.executable,'scripts/fault_proxy.py')
+    run(sys.executable,'scripts/jetstream_faults.py',executable('fault_integration'))
     # JavaScript uses the browser-standard WebSocket transport.
     os.environ['MOONNATS_TEST_URL']='ws://127.0.0.1:18080'
     run('node',root/'_build/js/debug/build/cmd/integration/integration.js')
@@ -48,7 +49,7 @@ with serving('test',config):
     run(sys.executable,'scripts/package_smoke.py')
     run(executable('oracle'));run(sys.executable,'scripts/oracle.py');run(executable('oracle'),'--verify')
     os.environ['MOONNATS_URL']='nats://127.0.0.1:14222'
-    for example in ['pubsub','request_reply','tasks','micro','workers']:
+    for example in ['pubsub','request_reply','tasks','micro','workers','reliable_tasks']:
         run('moon','run','examples/'+example,'--target','native')
     env={**os.environ}
     del os.environ['MOONNATS_URL']
