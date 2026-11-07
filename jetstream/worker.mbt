@@ -105,9 +105,9 @@ async fn Consumer::worker_fetch(
   recovery_timeout_ms : Int32,
 ) -> Array[@client.Received] {
   @async.with_timeout(poll_ms + 1500, () => self.fetch(expires_ms=poll_ms)) catch {
-    @client.Disconnected | @client.PublishUncertain | @async.TimeoutError if recovery_timeout_ms >
-      0 =>
+    error if recovery_timeout_ms > 0 && recoverable_pull_error(error) =>
       @async.with_timeout(recovery_timeout_ms, () => {
+        let mut retry_delay_ms = 25
         while !control.stopped {
           self.js.client.wait_connected(timeout_ms=100) catch {
             @async.TimeoutError => continue
@@ -117,9 +117,10 @@ async fn Consumer::worker_fetch(
             break
           }
           try self.fetch(expires_ms=poll_ms) catch {
-            @client.Disconnected
-            | @client.PublishUncertain
-            | @async.TimeoutError => @async.sleep(25)
+            error if recoverable_pull_error(error) => {
+              @async.sleep(retry_delay_ms)
+              retry_delay_ms = (retry_delay_ms * 2).min(500)
+            }
             e => raise e
           } noraise {
             batch => return batch
@@ -128,5 +129,20 @@ async fn Consumer::worker_fetch(
         []
       })
     e => raise e
+  }
+}
+
+///|
+fn recoverable_pull_error(error : Error) -> Bool {
+  match error {
+    @client.Disconnected | @client.PublishUncertain | @async.TimeoutError =>
+      true
+    // During a graceful shutdown NATS can release an in-flight pull before
+    // closing TCP. It uses the same status as deleting the consumer. Retry
+    // against the existing durable only, within the caller's recovery budget.
+    Status(409, "Consumer Deleted")
+    | Status(409, "Leadership Change")
+    | Status(503, _) => true
+    _ => false
   }
 }

@@ -19,7 +19,7 @@ consumer.consume(control, concurrency=4, ack_mode=@js.OnSuccess, message => {
 })
 ```
 
-Worker 在拉取遇到暂时性网络错误后等待连接恢复，继续从同一个 durable Consumer 拉取。`recovery_timeout_ms` 默认 30000，设为 0 时直接报告拉取错误。`OnSuccess` 可设置 `progress_ms` 定期发送 `+WPI`，间隔应短于服务器 `AckWait`。连接中断时无法延长确认期限，业务处理应按任务 ID 幂等。
+Worker 在拉取遇到暂时性网络错误后等待连接恢复，继续从同一个 durable Consumer 拉取。服务器关停或领导者切换时返回的过渡状态也在恢复预算内重试。`recovery_timeout_ms` 默认 30000，设为 0 时直接报告拉取错误。`OnSuccess` 可设置 `progress_ms` 定期发送 `+WPI`，间隔应短于服务器 `AckWait`。连接中断时无法延长确认期限，业务处理应按任务 ID 幂等。
 
 Publisher 作用域退出会等待确认并报告未观察到的失败；`pending`、`pending_bytes`、`ack_metrics` 提供在途数量、载荷预算和确认耗时统计。停止 Worker 不会删除 durable Consumer；`Manual` 模式由业务调用 `acknowledge`。处理器失败不隐式 ACK，也不替业务决定死信策略。
 
