@@ -31,13 +31,14 @@ pub fn Client::close(Self) -> Unit
 pub async fn Client::drain(Self, timeout_ms? : Int32) -> Unit
 pub async fn Client::flush(Self, timeout_ms? : Int32) -> Unit
 pub fn Client::new_inbox(Self) -> String
-pub async fn Client::publish(Self, String, Bytes, headers? : @moonnats.Headers, reply_to? : String) -> Unit
+pub async fn Client::publish(Self, String, Bytes, headers? : @moonnats.Headers, reply_to? : String, buffer_on_reconnect? : Bool) -> Unit
 pub async fn Client::reply(Self, Received, Bytes, headers? : @moonnats.Headers) -> Unit
 pub async fn Client::request(Self, String, Bytes, headers? : @moonnats.Headers, timeout_ms? : Int32) -> Received
 pub fn Client::state(Self) -> State
 pub fn Client::statistics(Self) -> Statistics
-pub async fn Client::subscribe(Self, String, queue? : String, max_messages? : Int32, capacity? : Int32) -> Subscription
+pub async fn Client::subscribe(Self, String, queue? : String, max_messages? : Int32, capacity? : Int32, restore? : Bool) -> Subscription
 pub async fn Client::unsubscribe(Self, Subscription) -> Unit
+pub async fn Client::wait_connected(Self, timeout_ms? : Int32) -> Unit
 
 pub(all) enum ClientEvent {
   LameDuck
@@ -61,11 +62,12 @@ pub(all) struct Options {
   signer : ((String) -> @moonnats.ConnectOptions raise)?
   credentials : (async (String?) -> @moonnats.ConnectOptions)?
   tls_first : Bool
+  require_tls : Bool
   reconnect_jitter_ms : Int32
   reconnect_buffer_bytes : Int32
   on_event : (ClientEvent) -> Unit
 }
-pub fn Options::new(servers? : Array[String], connect? : @moonnats.ConnectOptions, timeout_ms? : Int32, reconnect_attempts? : Int32, reconnect_delay_ms? : Int32, heartbeat_ms? : Int32, max_pending_bytes? : Int32, subscription_capacity? : Int32, trust? : Trust, on_state? : (State) -> Unit, signer? : (String) -> @moonnats.ConnectOptions raise, credentials? : async (String?) -> @moonnats.ConnectOptions, tls_first? : Bool, reconnect_jitter_ms? : Int32, reconnect_buffer_bytes? : Int32, on_event? : (ClientEvent) -> Unit) -> Self
+pub fn Options::new(servers? : Array[String], connect? : @moonnats.ConnectOptions, timeout_ms? : Int32, reconnect_attempts? : Int32, reconnect_delay_ms? : Int32, heartbeat_ms? : Int32, max_pending_bytes? : Int32, subscription_capacity? : Int32, trust? : Trust, on_state? : (State) -> Unit, signer? : (String) -> @moonnats.ConnectOptions raise, credentials? : async (String?) -> @moonnats.ConnectOptions, tls_first? : Bool, require_tls? : Bool, reconnect_jitter_ms? : Int32, reconnect_buffer_bytes? : Int32, on_event? : (ClientEvent) -> Unit) -> Self
 
 pub(all) struct Received {
   subject : String

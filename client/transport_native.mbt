@@ -83,6 +83,11 @@ async fn open(
   url : String,
   opts : Options,
 ) -> (Transport, @wire.Decoder, @wire.ServerInfo) {
+  if opts.require_tls {
+    guard url.has_prefix("tls://") || url.has_prefix("wss://") else {
+      raise InvalidOption("TLS policy requires a tls:// or wss:// endpoint")
+    }
+  }
   @async.with_timeout(opts.timeout_ms, () => {
     let websocket = url.has_prefix("ws://") || url.has_prefix("wss://")
     let mut transport = if websocket {

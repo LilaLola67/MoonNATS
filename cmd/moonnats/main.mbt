@@ -1,6 +1,6 @@
 ///|
 let usage : String =
-  #|MoonNATS 0.3.0
+  #|MoonNATS 0.3.1
   #|Usage: moonnats COMMAND [ARGS]
   #|  info | stats | metrics | account-info
   #|  pub SUBJECT TEXT | request SUBJECT TEXT | sub SUBJECT [COUNT]
@@ -10,7 +10,7 @@ let usage : String =
   #|  object-create BUCKET | object-put BUCKET NAME FILE
   #|  object-get BUCKET NAME OUTPUT | object-list BUCKET
   #|Environment: MOONNATS_URL, MOONNATS_USER, MOONNATS_PASSWORD,
-  #|MOONNATS_TOKEN, MOONNATS_NKEY_SEED, MOONNATS_JWT, MOONNATS_CA, MOONNATS_CREDS, MOONNATS_TLS_FIRST.
+  #|MOONNATS_TOKEN, MOONNATS_NKEY_SEED, MOONNATS_JWT, MOONNATS_CA, MOONNATS_CREDS, MOONNATS_TLS_FIRST, MOONNATS_REQUIRE_TLS.
   #|fetch displays messages without acknowledging them.
   #|object-get refuses to overwrite an existing output.
 
@@ -56,6 +56,14 @@ fn options() -> @client.Options raise {
         "MOONNATS_TLS_FIRST must be true, false, 1 or 0",
       )
   }
+  let require_tls = match @env.get_env_var("MOONNATS_REQUIRE_TLS") {
+    Some("1") | Some("true") => true
+    None | Some("0") | Some("false") => false
+    _ =>
+      raise @client.InvalidOption(
+        "MOONNATS_REQUIRE_TLS must be true, false, 1 or 0",
+      )
+  }
   @client.Options::new(
     servers=@env.get_env_var("MOONNATS_URL")
       .unwrap_or("nats://127.0.0.1:4222")
@@ -67,6 +75,7 @@ fn options() -> @client.Options raise {
     signer?,
     credentials?,
     tls_first~,
+    require_tls~,
   )
 }
 

@@ -43,6 +43,7 @@ pub(all) struct Options {
   signer : ((String) -> @wire.ConnectOptions raise)?
   credentials : (async (String?) -> @wire.ConnectOptions)?
   tls_first : Bool
+  require_tls : Bool
   reconnect_jitter_ms : Int32
   reconnect_buffer_bytes : Int32
   on_event : (ClientEvent) -> Unit
@@ -63,6 +64,7 @@ pub fn Options::new(
   signer? : (String) -> @wire.ConnectOptions raise,
   credentials? : async (String?) -> @wire.ConnectOptions,
   tls_first~ : Bool = false,
+  require_tls~ : Bool = false,
   reconnect_jitter_ms~ : Int32 = 100,
   reconnect_buffer_bytes~ : Int32 = 0,
   on_event~ : (ClientEvent) -> Unit = _ => (),
@@ -81,6 +83,7 @@ pub fn Options::new(
     signer,
     credentials,
     tls_first,
+    require_tls,
     reconnect_jitter_ms,
     reconnect_buffer_bytes,
     on_event,
@@ -107,7 +110,7 @@ pub struct Subscription {
   priv mut received : Int64
   priv mut closed : Bool
   priv owner : String
-  priv mut transient : Bool
+  priv transient : Bool
   priv mut active : Int32
 }
 
@@ -131,6 +134,7 @@ pub(all) struct Statistics {
 pub struct Client {
   priv options : Options
   priv servers : Array[String]
+  priv mut server_url : String
   priv retired_sids : Array[Int32]
   priv mut transport : Transport
   priv mut decoder : @wire.Decoder
@@ -223,16 +227,20 @@ pub async fn[X] with_client(options : Options, f : async (Client) -> X) -> X {
   let mut last_error : Error = RetryExhausted
   for url in options.servers {
     try {
-      connection = Some(open(url, options))
+      let (transport, decoder, info) = open(url, options)
+      connection = Some((transport, decoder, info, url))
       break
     } catch {
       e => last_error = e
     }
   }
-  guard connection is Some((transport, decoder, info)) else { raise last_error }
+  guard connection is Some((transport, decoder, info, url)) else {
+    raise last_error
+  }
   let c = {
     options,
     servers: options.servers.copy(),
+    server_url: url,
     retired_sids: [],
     transport,
     decoder,
@@ -266,7 +274,7 @@ pub async fn[X] with_client(options : Options, f : async (Client) -> X) -> X {
     c.close()
     c.transport.close()
   }
-  c.remember(c.info)
+  c.remember(c.info, initial=true)
   (options.on_state)(Connected)
   let mut result : X? = None
   @async.with_task_group(group => {
@@ -384,7 +392,8 @@ async fn Client::recover(self : Client, epoch : Int32) -> Unit {
           self.transport = transport
           self.decoder = decoder
           self.info = info
-          self.remember(info)
+          self.server_url = url
+          self.remember(info, initial=true)
           self.epoch += 1
           self.needs_reconnect = false
           self.reconnects += 1
@@ -405,7 +414,11 @@ async fn Client::recover(self : Client, epoch : Int32) -> Unit {
 }
 
 ///|
-async fn Client::send(self : Client, bytes : Bytes) -> Unit {
+async fn Client::send(
+  self : Client,
+  bytes : Bytes,
+  generation? : Int32,
+) -> Unit {
   guard self.state_ != Closed else { raise ConnectionClosed }
   guard bytes.length() <= self.options.max_pending_bytes - self.pending_bytes else {
     raise SlowConsumer
@@ -417,6 +430,13 @@ async fn Client::send(self : Client, bytes : Bytes) -> Unit {
   self.lock.acquire()
   defer self.lock.release()
   guard self.state_ != Closed else { raise ConnectionClosed }
+  if generation is Some(epoch) {
+    guard self.epoch == epoch &&
+      !self.needs_reconnect &&
+      self.state_ != Reconnecting else {
+      raise Disconnected
+    }
+  }
   errdefer {
     self.needs_reconnect = true
   }
@@ -538,6 +558,7 @@ pub async fn Client::publish(
   payload : Bytes,
   headers? : @wire.Headers,
   reply_to? : String,
+  buffer_on_reconnect~ : Bool = true,
 ) -> Unit {
   guard self.state_ != Closed else { raise ConnectionClosed }
   guard payload.length() <= self.info.max_payload else {
@@ -553,7 +574,9 @@ pub async fn Client::publish(
     None => @wire.publish(subject, payload, reply_to?)
   }
   if self.state_ == Reconnecting || self.needs_reconnect {
-    guard self.options.reconnect_buffer_bytes > 0 else { raise Disconnected }
+    guard buffer_on_reconnect && self.options.reconnect_buffer_bytes > 0 else {
+      raise Disconnected
+    }
     guard bytes.length() <=
       self.options.reconnect_buffer_bytes - self.buffered_bytes else {
       raise SlowConsumer
@@ -563,7 +586,12 @@ pub async fn Client::publish(
     self.buffered.push(bytes)
     self.buffered_bytes += bytes.length()
   } else {
-    self.send(bytes)
+    let generation = if reply_to is Some(_) || !buffer_on_reconnect {
+      Some(self.epoch)
+    } else {
+      None
+    }
+    self.send(bytes, generation?)
   }
   self.sent_messages += 1
   self.sent_bytes += payload.length().to_int64()
@@ -576,12 +604,19 @@ pub async fn Client::subscribe(
   queue? : String,
   max_messages? : Int32,
   capacity? : Int32,
+  restore~ : Bool = true,
 ) -> Subscription {
-  guard !self.draining else { raise ConnectionClosed }
+  guard !self.draining && self.state_ != Closed else { raise ConnectionClosed }
+  if !restore {
+    guard self.state_ == Connected && !self.needs_reconnect else {
+      raise Disconnected
+    }
+  }
   self.prune()
   guard self.subscriptions.length() < 4096 else {
     raise InvalidOption("subscription limit")
   }
+  let generation = if restore { None } else { Some(self.epoch) }
   let sid = self.next_sid
   guard sid < 2147483647 else {
     raise InvalidOption("subscription id exhausted")
@@ -604,7 +639,7 @@ pub async fn Client::subscribe(
     received: 0L,
     closed: false,
     owner: self.inbox_prefix,
-    transient: false,
+    transient: !restore,
     active: 0,
   }
   self.subscriptions[sid] = sub
@@ -612,9 +647,9 @@ pub async fn Client::subscribe(
     self.subscriptions.remove(sid)
     sub.inbox.close(error=ConnectionClosed)
   }
-  self.send(wire)
+  self.send(wire, generation?)
   if max_messages is Some(n) {
-    self.send(@wire.unsubscribe(sid, max_messages=n))
+    self.send(@wire.unsubscribe(sid, max_messages=n), generation?)
   }
   sub
 }
@@ -685,8 +720,7 @@ pub async fn Client::request(
   }
   @async.with_timeout(timeout, () => {
     let inbox = self.new_inbox()
-    let sub = self.subscribe(inbox, max_messages=1)
-    sub.transient = true
+    let sub = self.subscribe(inbox, max_messages=1, restore=false)
     defer @async.protect_from_cancel(() => {
       @async.with_timeout(250, () => self.unsubscribe(sub)) catch {
         _ => ()
@@ -769,8 +803,19 @@ fn Client::prune(self : Client) -> Unit {
 }
 
 ///|
-fn Client::remember(self : Client, info : @wire.ServerInfo) -> Unit {
-  let initial = self.options.servers[0]
+fn Client::remember(
+  self : Client,
+  info : @wire.ServerInfo,
+  initial~ : Bool = false,
+) -> Unit {
+  // In standard TCP/TLS the first INFO arrives before server authentication.
+  if initial &&
+    self.options.require_tls &&
+    self.server_url.has_prefix("tls://") &&
+    !self.options.tls_first {
+    return
+  }
+  let initial = self.server_url
   let websocket = initial.has_prefix("ws://") || initial.has_prefix("wss://")
   let prefix = if websocket {
     if initial.has_prefix("wss://") {
@@ -823,3 +868,20 @@ pub(all) enum ClientEvent {
 
 ///|
 pub extend ClientEvent with @debug.Debug::{to_repr}
+
+///|
+/// Wait for the active connection, including any recovery already scheduled.
+pub async fn Client::wait_connected(
+  self : Client,
+  timeout_ms~ : Int32 = 5000,
+) -> Unit {
+  guard timeout_ms > 0 else { raise InvalidOption("connection wait timeout") }
+  @async.with_timeout(timeout_ms, () => {
+    while self.state_ != Connected || self.needs_reconnect {
+      guard self.state_ != Closed && !self.draining else {
+        raise ConnectionClosed
+      }
+      @async.sleep(10)
+    }
+  })
+}
