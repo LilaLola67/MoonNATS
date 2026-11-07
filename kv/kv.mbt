@@ -95,7 +95,7 @@ pub async fn Bucket::create(
   self.put(key, value, expected_revision=0L) catch {
     @js.Api(_, 10071, _) => {
       let entry = self.get(key)
-      guard entry.operation == "DEL" || entry.operation == "PURGE" else {
+      guard removed(entry.operation) else {
         raise @js.Invalid("key already exists")
       }
       self.put(key, value, expected_revision=entry.revision)
@@ -143,7 +143,7 @@ pub async fn Bucket::get(
     Some(String(data)) => @wire.Headers::parse(@base64.decode(data))
     _ => @wire.Headers::new()
   }
-  let operation = headers.get("KV-Operation").unwrap_or("PUT")
+  let operation = operation(headers)
   {
     bucket: self.name,
     key,
@@ -184,7 +184,7 @@ fn Bucket::entry(self : Bucket, msg : @client.Received) -> Entry raise {
     key: msg.subject[prefix.length():].to_owned(),
     value: msg.payload,
     revision: metadata.stream_sequence,
-    operation: msg.headers.get("KV-Operation").unwrap_or("PUT"),
+    operation: operation(msg.headers),
     pending: metadata.pending,
   }
 }
@@ -257,4 +257,19 @@ pub async fn Watch::close(self : Watch) -> Unit {
 ///|
 pub async fn Bucket::destroy(self : Bucket) -> Unit {
   self.js.delete_stream("KV_" + self.name)
+}
+
+///|
+fn operation(headers : @wire.Headers) -> String {
+  match headers.get("Nats-Marker-Reason") {
+    Some("MaxAge") => "EXPIRE"
+    Some("Purge") => "PURGE"
+    Some("Remove") => "DEL"
+    _ => headers.get("KV-Operation").unwrap_or("PUT")
+  }
+}
+
+///|
+fn removed(operation : String) -> Bool {
+  operation == "DEL" || operation == "PURGE" || operation == "EXPIRE"
 }

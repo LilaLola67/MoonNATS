@@ -9,7 +9,8 @@ pub struct ConfigCache {
   priv bucket : Bucket
   priv pattern : String
   priv max_keys : Int32
-  priv values : Map[String, Entry]
+  priv values : Map[String, CachedEntry]
+  priv mut max_age_ns : Int64
   priv mut consumer : @js.Consumer
   priv mut generation : Int64
   priv mut delivered : Int64
@@ -49,6 +50,7 @@ pub async fn Bucket::config_cache(
     pattern,
     max_keys,
     values: Map([]),
+    max_age_ns: 0L,
     consumer,
     generation: -1L,
     delivered: 0L,
@@ -63,33 +65,88 @@ pub async fn Bucket::config_cache(
 }
 
 ///|
+priv struct CachedEntry {
+  entry : Entry
+  expires_at_ms : Int64?
+}
+
+///|
+fn CachedEntry::expired(self : CachedEntry, now_ms : Int64) -> Bool {
+  self.expires_at_ms is Some(deadline) && deadline <= now_ms
+}
+
+///|
 fn apply(
-  values : Map[String, Entry],
+  values : Map[String, CachedEntry],
   entry : Entry,
+  timestamp_ns : Int64,
+  max_age_ns : Int64,
   max_keys : Int32,
-) -> Unit raise {
-  if entry.operation == "DEL" || entry.operation == "PURGE" {
+) -> Entry raise {
+  if removed(entry.operation) {
     values.remove(entry.key)
+    return entry
+  }
+  let now_ms = @env.now().reinterpret_as_int64()
+  let expires_at_ms = if max_age_ns > 0L {
+    guard timestamp_ns > 0L else {
+      raise @js.Invalid("missing KV message timestamp")
+    }
+    Some(timestamp_ns / 1000000L + max_age_ns / 1000000L)
   } else {
-    guard values.contains(entry.key) || values.length() < max_keys else {
+    None
+  }
+  let cached : CachedEntry = { entry, expires_at_ms, }
+  if cached.expired(now_ms) {
+    values.remove(entry.key)
+    return { ..entry, operation: "EXPIRE", value: b"", }
+  }
+  if !values.contains(entry.key) && values.length() >= max_keys {
+    let expired = values
+      .iter()
+      .filter_map(pair => {
+        if pair.1.expired(now_ms) {
+          Some(pair.0)
+        } else {
+          None
+        }
+      })
+      .to_array()
+    for key in expired {
+      values.remove(key)
+    }
+    guard values.length() < max_keys else {
       raise @js.Invalid("cache key limit exceeded")
     }
-    values[entry.key] = entry
   }
+  values[entry.key] = cached
+  entry
 }
 
 ///|
 async fn ConfigCache::load_snapshot(self : ConfigCache) -> Unit {
   self.ready_ = false
   let generation = self.bucket.js.client.statistics().reconnects
-  let staged : Map[String, Entry] = Map([])
+  let staged : Map[String, CachedEntry] = Map([])
   self.delivered = 0L
   @async.with_timeout(10000, () => {
+    let stream = self.bucket.js.stream_info("KV_" + self.bucket.name)
+    guard stream is { "config": config, .. } else {
+      raise @js.Invalid("KV stream config")
+    }
+    self.max_age_ns = @js.integer_field(config, "max_age")
+    guard self.max_age_ns >= 0L else { raise @js.Invalid("KV stream max_age") }
     let status = self.consumer.info()
     let mut pending = @js.integer_field(status, "num_pending")
     while pending > 0L {
       let batch = self.consumer.fetch(batch=64, expires_ms=250)
-      guard !batch.is_empty() else { raise @js.Invalid("snapshot incomplete") }
+      if batch.is_empty() {
+        // Entries may have expired since the pending count was sampled.
+        guard @js.integer_field(self.consumer.info(), "num_pending") == 0L else {
+          raise @js.Invalid("snapshot incomplete")
+        }
+        break
+      }
       for msg in batch {
         let meta = @js.metadata(msg)
         guard meta.consumer_sequence == self.delivered + 1L else {
@@ -97,7 +154,15 @@ async fn ConfigCache::load_snapshot(self : ConfigCache) -> Unit {
         }
         self.delivered = meta.consumer_sequence
         let entry = self.bucket.entry(msg)
-        apply(staged, entry, self.max_keys)
+        ignore(
+          apply(
+            staged,
+            entry,
+            meta.timestamp_ns,
+            self.max_age_ns,
+            self.max_keys,
+          ),
+        )
         pending = entry.pending
       }
     }
@@ -123,17 +188,31 @@ pub fn ConfigCache::ready(self : ConfigCache) -> Bool {
 
 ///|
 pub fn ConfigCache::get(self : ConfigCache, key : String) -> Entry? {
-  if self.ready() {
-    self.values.get(key)
-  } else {
+  guard self.ready() && self.values.get(key) is Some(cached) else {
+    return None
+  }
+  if cached.expired(@env.now().reinterpret_as_int64()) {
+    self.values.remove(key)
     None
+  } else {
+    Some(cached.entry)
   }
 }
 
 ///|
 pub fn ConfigCache::snapshot(self : ConfigCache) -> Array[Entry] raise {
   guard self.ready() else { raise @js.Invalid("cache needs resynchronization") }
-  self.values.values().to_array()
+  let now_ms = @env.now().reinterpret_as_int64()
+  self.values
+  .values()
+  .filter_map(cached => {
+    if cached.expired(now_ms) {
+      None
+    } else {
+      Some(cached.entry)
+    }
+  })
+  .to_array()
 }
 
 ///|
@@ -196,13 +275,18 @@ pub async fn ConfigCache::next(
       }
       self.delivered = meta.consumer_sequence
       let entry = self.bucket.entry(msg)
-      {
-        errdefer {
-          self.ready_ = false
-        }
-        apply(self.values, entry, self.max_keys)
+      errdefer {
+        self.ready_ = false
       }
-      return Updated(entry)
+      return Updated(
+        apply(
+          self.values,
+          entry,
+          meta.timestamp_ns,
+          self.max_age_ns,
+          self.max_keys,
+        ),
+      )
     }
     raise @js.Invalid("unreachable")
   })
