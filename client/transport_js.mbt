@@ -120,7 +120,9 @@ async fn open(
         _ => opts.connect
       }
     }
-    transport.write(@wire.connect_command(connect) + b"PING\r\n")
+    transport.write(
+      @wire.connect_command(connect, headers=info.headers) + b"PING\r\n",
+    )
     let mut ready = false
     while !ready {
       guard transport.read() is Some(bytes) else { raise Disconnected }

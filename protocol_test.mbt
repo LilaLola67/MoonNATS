@@ -83,3 +83,15 @@ test "CONNECT uses JSON escaping and INFO exposes negotiated capabilities" {
   assert_eq(info.max_payload, 512)
   assert_true(info.headers && info.tls_required)
 }
+
+///|
+test "topology-only INFO preserves negotiated publish capabilities" {
+  let info = @moonnats.ServerInfo::parse(
+    "{\"server_id\":\"seed\",\"max_payload\":64,\"headers\":true}",
+  )
+  let updated = info.update("{\"connect_urls\":[\"127.0.0.1:4223\"]}")
+  assert_true(updated.raw is { "server_id": String("seed"), .. })
+  assert_eq(updated.max_payload, 64)
+  assert_true(updated.headers)
+  assert_eq(updated.connect_urls, ["127.0.0.1:4223"])
+}

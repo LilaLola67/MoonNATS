@@ -23,3 +23,5 @@ AGENTS.md
 
 *.creds
 *.jwt
+
+__pycache__/

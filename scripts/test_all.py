@@ -1,6 +1,9 @@
 """Run real-server, authentication, fault, CLI and independent-client tests."""
 from pathlib import Path
-import argparse, contextlib, os, subprocess, sys, time
+import argparse, asyncio, contextlib, os, subprocess, sys, time
+sys.dont_write_bytecode = True
+from client_faults import check_buffer, check_flush
+
 root=Path(__file__).resolve().parent.parent
 os.chdir(root)
 parser=argparse.ArgumentParser();parser.add_argument('--server');args=parser.parse_args()
@@ -20,7 +23,7 @@ def serving(name, config):
         try:
             time.sleep(.4)
             if process.poll() is not None: raise RuntimeError('Test server failed: '+name)
-            yield
+            yield process
         finally:
             if process.poll() is None: process.terminate();process.wait(timeout=5)
 for package in ['integration','oracle','recovery','auth_integration','moonnats','ws_integration','extended_integration','fault_integration','benchmark']:
@@ -57,6 +60,29 @@ with serving('test',config):
     assert result.returncode==1 and 'error' in result.stderr
     print('CLI: info, nonzero error status and clean stderr PASS')
 run(sys.executable,'scripts/recovery.py',server)
+permissions = '''
+listen: "127.0.0.1:14232"
+max_sub_tokens: 2
+authorization {
+  users: [{
+    user: "test-permissions"
+    password: "synthetic-test-password"
+    permissions: {
+      publish: { allow: ["permission.allowed", "permission.jobs"] }
+      subscribe: { allow: ["permission.allowed", "permission.jobs workers", "permission.too.long workers"] }
+    }
+  }]
+}
+'''
+fault_client = executable('fault_integration')
+with serving('permissions', permissions):
+    run(fault_client, '--permissions')
+with (
+    serving('buffer-primary', 'listen: "127.0.0.1:14233"\nmax_payload: 1024') as primary,
+    serving('buffer-backup', 'listen: "127.0.0.1:14234"\nmax_payload: 64\nno_header_support: true'),
+):
+    asyncio.run(check_buffer(fault_client, primary))
+asyncio.run(check_flush(fault_client, os.environ))
 public=subprocess.check_output([str(executable('auth_integration')),'--public'],text=True).strip()
 with open(root/'.tools/certificate.log','w') as cert_log:
     subprocess.run(['openssl','req','-x509','-newkey','rsa:2048','-nodes','-keyout','.test-data/key.pem','-out','.test-data/cert.pem','-days','2','-subj','/CN=localhost','-addext','subjectAltName=DNS:localhost'],stdout=cert_log,stderr=cert_log,check=True,timeout=30)

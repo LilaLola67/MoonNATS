@@ -6,6 +6,7 @@ import {
   "moonbitlang/core/async/websocket" @ws,
   "moonbitlang/core/async/aqueue",
   "moonbitlang/core/debug",
+  "moonbitlang/core/json",
 }
 
 supported_targets = "+native+js"

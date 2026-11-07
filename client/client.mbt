@@ -4,6 +4,7 @@ pub(all) suberror ClientError {
   Disconnected
   NoResponders
   SlowConsumer
+  SubscriptionDenied(String)
   InvalidOption(String)
   Server(String)
   RetryExhausted
@@ -158,7 +159,7 @@ pub struct Client {
   priv mut received_bytes : Int64
   priv mut reconnects : Int64
   priv mut slow_consumers : Int64
-  priv buffered : Array[Bytes]
+  priv buffered : Array[PublishFrame]
   priv mut buffered_bytes : Int32
   priv mut requests : Int64
   priv mut request_errors : Int64
@@ -287,7 +288,7 @@ pub async fn[X] with_client(options : Options, f : async (Client) -> X) -> X {
           @async.sleep(options.heartbeat_ms)
           if c.state_ == Connected {
             c.flush() catch {
-              _ => c.needs_reconnect = true
+              _ => ()
             }
           }
         }
@@ -377,9 +378,15 @@ async fn Client::recover(self : Client, epoch : Int32) -> Unit {
           // Remove before writing: a partial write must never be replayed.
           while !self.buffered.is_empty() {
             let frame = self.buffered.remove(0)
-            self.buffered_bytes -= frame.length()
+            self.buffered_bytes -= frame.bytes.length()
+            if frame.incompatibility(info) is Some(reason) {
+              (self.options.on_event)(
+                BufferedPublishRejected(frame.subject, reason),
+              )
+              continue
+            }
             errdefer (self.options.on_event)(WriteUncertain)
-            transport.write(frame)
+            transport.write(frame.bytes)
           }
           true
         } catch {
@@ -418,6 +425,7 @@ async fn Client::send(
   self : Client,
   bytes : Bytes,
   generation? : Int32,
+  publish_frame? : PublishFrame,
 ) -> Unit {
   guard self.state_ != Closed else { raise ConnectionClosed }
   guard bytes.length() <= self.options.max_pending_bytes - self.pending_bytes else {
@@ -436,6 +444,9 @@ async fn Client::send(
       self.state_ != Reconnecting else {
       raise Disconnected
     }
+  }
+  if publish_frame is Some(frame) {
+    frame.validate(self.info)
   }
   errdefer {
     self.needs_reconnect = true
@@ -523,17 +534,20 @@ async fn Client::read_loop(self : Client) -> Unit {
               self.pong = None
             }
           Info(s) => {
-            self.info = @wire.ServerInfo::parse(s)
+            self.info = self.info.update(s)
             self.remember(self.info)
             if self.info.raw is { "ldm": True, .. } {
               (self.options.on_event)(LameDuck)
               self.needs_reconnect = true
             }
           }
-          ServerError(s) => {
-            self.close()
-            raise Server(s)
-          }
+          ServerError(s) =>
+            if permission_denial(s) is Some(denial) {
+              self.report_denial(denial)
+            } else {
+              self.close()
+              raise Server(s)
+            }
           Ok => ()
         }
       }
@@ -564,14 +578,27 @@ pub async fn Client::publish(
   guard payload.length() <= self.info.max_payload else {
     raise InvalidOption("server max_payload")
   }
-  let bytes = match headers {
+  let (bytes, message_bytes) = match headers {
     Some(h) => {
-      guard h.encode().length() <= self.info.max_payload - payload.length() else {
+      guard self.info.headers else {
+        raise InvalidOption("server does not support headers")
+      }
+      let header_bytes = h.encode().length()
+      guard header_bytes <= self.info.max_payload - payload.length() else {
         raise InvalidOption("server max_payload including headers")
       }
-      @wire.publish_headers(subject, h, payload, reply_to?)
+      (
+        @wire.publish_headers(subject, h, payload, reply_to?),
+        header_bytes + payload.length(),
+      )
     }
-    None => @wire.publish(subject, payload, reply_to?)
+    None => (@wire.publish(subject, payload, reply_to?), payload.length())
+  }
+  let frame : PublishFrame = {
+    subject,
+    bytes,
+    message_bytes,
+    has_headers: headers is Some(_),
   }
   if self.state_ == Reconnecting || self.needs_reconnect {
     guard buffer_on_reconnect && self.options.reconnect_buffer_bytes > 0 else {
@@ -583,7 +610,7 @@ pub async fn Client::publish(
     }
     // Requests must fail, rather than queue a reply subject that may expire.
     guard reply_to is None else { raise Disconnected }
-    self.buffered.push(bytes)
+    self.buffered.push(frame)
     self.buffered_bytes += bytes.length()
   } else {
     let generation = if reply_to is Some(_) || !buffer_on_reconnect {
@@ -591,7 +618,7 @@ pub async fn Client::publish(
     } else {
       None
     }
-    self.send(bytes, generation?)
+    self.send(bytes, generation?, publish_frame=frame)
   }
   self.sent_messages += 1
   self.sent_bytes += payload.length().to_int64()
@@ -686,16 +713,26 @@ pub fn Subscription::pending(self : Subscription) -> Int32 {
 
 ///|
 pub async fn Client::flush(self : Client, timeout_ms? : Int32) -> Unit {
-  self.flush_lock.acquire()
-  defer self.flush_lock.release()
-  let q = @aqueue.Queue(kind=Blocking(1))
-  self.pong = Some(q)
-  errdefer {
-    self.pong = None
-    self.needs_reconnect = true
-  }
-  self.send(b"PING\r\n")
-  @async.with_timeout(timeout_ms.unwrap_or(self.options.timeout_ms), () => {
+  let timeout = timeout_ms.unwrap_or(self.options.timeout_ms)
+  guard timeout > 0 else { raise InvalidOption("flush timeout") }
+  @async.with_timeout(timeout, () => {
+    self.flush_lock.acquire()
+    defer self.flush_lock.release()
+    // A timed-out PING has no correlation ID. Do not install another waiter
+    // until recovery has replaced that connection and drained its old PONGs.
+    while self.needs_reconnect || self.state_ == Reconnecting {
+      guard self.state_ != Closed else { raise ConnectionClosed }
+      @async.sleep(5)
+    }
+    guard self.state_ != Closed else { raise ConnectionClosed }
+    let epoch = self.epoch
+    let q = @aqueue.Queue(kind=Blocking(1))
+    self.pong = Some(q)
+    errdefer (if self.epoch == epoch && self.state_ != Closed {
+      self.pong = None
+      self.needs_reconnect = true
+    })
+    self.send(b"PING\r\n", generation=epoch)
     q.get()
   })
 }
@@ -864,6 +901,8 @@ pub(all) enum ClientEvent {
   SubscriptionSlow(String)
   WriteUncertain
   BufferDiscarded(Int32)
+  PermissionViolation(PermissionDenial)
+  BufferedPublishRejected(String, BufferRejectReason)
 } derive(Debug)
 
 ///|

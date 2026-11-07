@@ -25,17 +25,20 @@ pub fn ConnectOptions::new(
 }
 
 ///|
-pub fn connect_command(options : ConnectOptions) -> Bytes {
+pub fn connect_command(
+  options : ConnectOptions,
+  headers~ : Bool = true,
+) -> Bytes {
   let values : Map[String, Json] = {
     "verbose": false,
     "pedantic": true,
     "tls_required": false,
     "name": Json(options.name),
     "lang": "moonbit",
-    "version": "0.2.0",
+    "version": "0.3.3",
     "protocol": 1,
-    "headers": true,
-    "no_responders": true,
+    "headers": Json(headers),
+    "no_responders": Json(headers),
     "echo": Json(options.echo),
   }
   for
@@ -70,6 +73,30 @@ pub(all) struct ServerInfo {
 pub fn ServerInfo::parse(text : String) -> ServerInfo raise ProtocolError {
   let j = @json.parse(text) catch { _ => raise Invalid("invalid INFO JSON") }
   guard j is Object(_) else { raise Invalid("INFO must be object") }
+  server_info(j)
+}
+
+///|
+/// Merge an asynchronous INFO update with capabilities from the current connection.
+pub fn ServerInfo::update(
+  self : ServerInfo,
+  text : String,
+) -> ServerInfo raise ProtocolError {
+  let patch = @json.parse(text) catch {
+    _ => raise Invalid("invalid INFO JSON")
+  }
+  guard self.raw is Object(current) && patch is Object(fields) else {
+    raise Invalid("INFO must be object")
+  }
+  let merged = current.copy()
+  for key, value in fields {
+    merged[key] = value
+  }
+  server_info(Json::object(merged))
+}
+
+///|
+fn server_info(j : Json) -> ServerInfo {
   let max_payload = match j {
     { "max_payload": Number(n, ..), .. } if n > 0 && n <= 2147483645.0 =>
       n.to_int()

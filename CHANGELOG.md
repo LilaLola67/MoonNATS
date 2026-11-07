@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.3
+
+- Report subject permission errors as events and close only the affected subscriptions.
+- Check buffered publishes against the replacement server's payload and header capabilities before replay. Negotiate header-dependent CONNECT options with each server.
+- Apply the flush deadline to lock acquisition, writes and the PONG wait. Recover the connection before using a new PING after a timeout.
+- Exercise these paths with restricted NATS accounts, a lower-capacity failover target and a delayed PONG.
+
 ## 0.3.2
 
 - Add a real three-node cluster acceptance suite with 50,000 cross-node Core messages and 12,000 replicated tasks across two load phases.

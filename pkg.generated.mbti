@@ -6,7 +6,7 @@ import {
 }
 
 // Values
-pub fn connect_command(ConnectOptions) -> Bytes
+pub fn connect_command(ConnectOptions, headers? : Bool) -> Bytes
 
 pub fn publish(String, Bytes, reply_to? : String) -> Bytes raise ProtocolError
 
@@ -94,6 +94,7 @@ pub(all) struct ServerInfo {
   connect_urls : Array[String]
 }
 pub fn ServerInfo::parse(String) -> Self raise ProtocolError
+pub fn ServerInfo::update(Self, String) -> Self raise ProtocolError
 
 // Type aliases
 

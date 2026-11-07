@@ -15,6 +15,7 @@ pub(all) suberror ClientError {
   Disconnected
   NoResponders
   SlowConsumer
+  SubscriptionDenied(String)
   InvalidOption(String)
   Server(String)
   RetryExhausted
@@ -23,6 +24,12 @@ pub(all) suberror ClientError {
 pub fn ClientError::to_repr(Self) -> @debug.Repr
 
 // Types and methods
+pub(all) enum BufferRejectReason {
+  PayloadTooLarge(Int32, Int32)
+  HeadersUnsupported
+} derive(@debug.Debug)
+pub fn BufferRejectReason::to_repr(Self) -> @debug.Repr
+
 pub struct Client {
   mut info : @moonnats.ServerInfo
   // private fields
@@ -45,6 +52,8 @@ pub(all) enum ClientEvent {
   SubscriptionSlow(String)
   WriteUncertain
   BufferDiscarded(Int32)
+  PermissionViolation(PermissionDenial)
+  BufferedPublishRejected(String, BufferRejectReason)
 } derive(@debug.Debug)
 pub fn ClientEvent::to_repr(Self) -> @debug.Repr
 
@@ -68,6 +77,22 @@ pub(all) struct Options {
   on_event : (ClientEvent) -> Unit
 }
 pub fn Options::new(servers? : Array[String], connect? : @moonnats.ConnectOptions, timeout_ms? : Int32, reconnect_attempts? : Int32, reconnect_delay_ms? : Int32, heartbeat_ms? : Int32, max_pending_bytes? : Int32, subscription_capacity? : Int32, trust? : Trust, on_state? : (State) -> Unit, signer? : (String) -> @moonnats.ConnectOptions raise, credentials? : async (String?) -> @moonnats.ConnectOptions, tls_first? : Bool, require_tls? : Bool, reconnect_jitter_ms? : Int32, reconnect_buffer_bytes? : Int32, on_event? : (ClientEvent) -> Unit) -> Self
+
+pub(all) struct PermissionDenial {
+  operation : PermissionOperation
+  subject : String?
+  queue : String?
+  sid : Int32?
+  message : String
+} derive(@debug.Debug)
+pub fn PermissionDenial::to_repr(Self) -> @debug.Repr
+
+pub(all) enum PermissionOperation {
+  Publish
+  Subscribe
+  PublishReply
+} derive(@debug.Debug)
+pub fn PermissionOperation::to_repr(Self) -> @debug.Repr
 
 pub(all) struct Received {
   subject : String

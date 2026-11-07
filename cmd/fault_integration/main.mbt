@@ -1,5 +1,18 @@
 ///|
 async fn main {
+  let args = @env.args()
+  if args.contains("--permissions") {
+    permissions_case()
+    return
+  }
+  if args.contains("--buffer") {
+    buffer_case()
+    return
+  }
+  if args.contains("--flush") {
+    flush_case()
+    return
+  }
   let mut lame_duck = false
   @client.with_client(
     @client.Options::new(
