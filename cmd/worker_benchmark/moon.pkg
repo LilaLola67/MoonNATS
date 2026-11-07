@@ -1,0 +1,10 @@
+import {
+  "LilaLola67/moonnats/client",
+  "LilaLola67/moonnats/jetstream" @js,
+  "moonbitlang/core/async",
+  "moonbitlang/core/env",
+}
+
+pkgtype(kind: "executable")
+
+supported_targets = "+native"

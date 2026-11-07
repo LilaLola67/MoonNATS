@@ -43,6 +43,7 @@ pub struct Decoder {
   mut failed : Bool
 }
 pub fn Decoder::feed(Self, Bytes) -> Array[Event] raise ProtocolError
+pub fn Decoder::feed_sized(Self, Bytes) -> Array[(Event, Int32)] raise ProtocolError
 pub fn Decoder::finish(Self) -> Unit raise ProtocolError
 pub fn Decoder::new(max_line? : Int32, max_payload? : Int32) -> Self raise ProtocolError
 

@@ -89,7 +89,7 @@ fn subject(s : String, wildcard : Bool) -> Bool {
 fn Decoder::line(
   self : Decoder,
   line : String,
-  out : Array[Event],
+  emit : (Event, Int32) -> Unit,
 ) -> Unit raise ProtocolError {
   let fields = line
     .replace_all(old="\t", new=" ")
@@ -101,15 +101,15 @@ fn Decoder::line(
   match fields[0].to_upper() {
     "PING" => {
       guard fields.length() == 1 else { raise Invalid("PING arguments") }
-      out.push(Ping)
+      emit(Ping, 0)
     }
     "PONG" => {
       guard fields.length() == 1 else { raise Invalid("PONG arguments") }
-      out.push(Pong)
+      emit(Pong, 0)
     }
     "+OK" => {
       guard fields.length() == 1 else { raise Invalid("OK arguments") }
-      out.push(Ok)
+      emit(Ok, 0)
     }
     "INFO" => {
       guard line.length() > 5 else { raise Invalid("missing INFO") }
@@ -118,11 +118,11 @@ fn Decoder::line(
         _ => raise Invalid("invalid INFO JSON")
       }
       guard parsed is Object(_) else { raise Invalid("INFO must be object") }
-      out.push(Info(data))
+      emit(Info(data), 0)
     }
     "-ERR" => {
       guard line.length() > 5 else { raise Invalid("missing server error") }
-      out.push(ServerError(line[5:].to_owned()))
+      emit(ServerError(line[5:].to_owned()), 0)
     }
     "MSG" | "HMSG" => {
       let has_headers = fields[0].to_upper() == "HMSG"
@@ -165,7 +165,7 @@ fn Decoder::line(
 fn Decoder::consume(
   self : Decoder,
   chunk : Bytes,
-  out : Array[Event],
+  emit : (Event, Int32) -> Unit,
 ) -> Unit raise ProtocolError {
   for byte in chunk {
     self.buffer.push(byte)
@@ -182,14 +182,15 @@ fn Decoder::consume(
           payload: Bytes::from_array(self.buffer[header_size:size]),
         }
         if header_size > 0 {
-          out.push(
+          emit(
             Hmsg(
               msg,
               Headers::parse(Bytes::from_array(self.buffer[:header_size])),
             ),
+            header_size,
           )
         } else {
-          out.push(Msg(msg))
+          emit(Msg(msg), 0)
         }
         self.pending = None
         self.buffer = []
@@ -204,7 +205,7 @@ fn Decoder::consume(
           _ => raise Invalid("invalid UTF-8 control line")
         }
         self.buffer = []
-        self.line(line, out)
+        self.line(line, emit)
       }
     }
   }
@@ -216,17 +217,37 @@ pub fn Decoder::feed(
   self : Decoder,
   chunk : Bytes,
 ) -> Array[Event] raise ProtocolError {
+  let out = []
+  self.decode(chunk, (event, _) => out.push(event))
+  out
+}
+
+///|
+/// Feed transport fragments and return each event with its raw header length.
+pub fn Decoder::feed_sized(
+  self : Decoder,
+  chunk : Bytes,
+) -> Array[(Event, Int32)] raise ProtocolError {
+  let out = []
+  self.decode(chunk, (event, header_size) => out.push((event, header_size)))
+  out
+}
+
+///|
+fn Decoder::decode(
+  self : Decoder,
+  chunk : Bytes,
+  emit : (Event, Int32) -> Unit,
+) -> Unit raise ProtocolError {
   guard !self.failed else {
     raise Invalid("decoder failed; create a new decoder")
   }
-  let out = []
   errdefer {
     self.failed = true
     self.buffer = []
     self.pending = None
   }
-  self.consume(chunk, out)
-  out
+  self.consume(chunk, emit)
 }
 
 ///|

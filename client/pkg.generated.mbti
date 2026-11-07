@@ -134,6 +134,7 @@ pub struct Subscription {
   // private fields
 }
 pub async fn Subscription::next(Self, timeout_ms? : Int32) -> Received
+pub async fn Subscription::next_with_header_size(Self, timeout_ms? : Int32) -> (Received, Int32)
 pub fn Subscription::pending(Self) -> Int32
 pub async fn Subscription::process_next(Self, async (Received) -> Unit, timeout_ms? : Int32) -> Unit
 pub fn Subscription::received_count(Self) -> Int64

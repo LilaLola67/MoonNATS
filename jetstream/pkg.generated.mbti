@@ -189,6 +189,7 @@ pub struct WorkControl {
 pub fn WorkControl::active(Self) -> Int32
 pub fn WorkControl::completed(Self) -> Int64
 pub fn WorkControl::new() -> Self
+pub fn WorkControl::prefetch_peaks(Self) -> (Int32, Int32)
 pub fn WorkControl::stop(Self) -> Unit
 pub fn WorkControl::uncertain(Self) -> Int64
 

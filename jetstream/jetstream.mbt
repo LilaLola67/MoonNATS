@@ -363,6 +363,19 @@ pub async fn Consumer::fetch(
   expires_ms~ : Int32 = 1000,
   max_bytes? : Int32,
 ) -> Array[@client.Received] {
+  let out = []
+  self.pull_each(batch, expires_ms, max_bytes?, (msg, _) => out.push(msg))
+  out
+}
+
+///|
+async fn Consumer::pull_each(
+  self : Consumer,
+  batch : Int32,
+  expires_ms : Int32,
+  max_bytes? : Int32,
+  deliver : (@client.Received, Int32) -> Unit raise,
+) -> Unit {
   guard batch > 0 && batch <= 10000 && expires_ms > 0 && expires_ms <= 300000 else {
     raise Invalid("fetch limits")
   }
@@ -387,25 +400,29 @@ pub async fn Consumer::fetch(
     @utf8.encode(Json::object(data).stringify()),
     reply_to=inbox,
   )
-  let out = []
+  let mut delivered = 0
   let deadline = @async.now() + expires_ms.to_int64() + 1000L
-  while out.length() < batch {
+  while delivered < batch {
     let remaining = deadline - @async.now()
     if remaining <= 0L {
       break
     }
-    let msg = sub.next(timeout_ms=remaining.to_int())
+    let (msg, header_size) = sub.next_with_header_size(
+      timeout_ms=remaining.to_int(),
+    )
     match msg.headers.status {
       Some(100) => ()
       Some(404) | Some(408) => break
       Some(409) if msg.headers.description == "Batch Completed" => break
-      Some(409) if !out.is_empty() &&
+      Some(409) if delivered > 0 &&
         msg.headers.description == "Message Size Exceeds MaxBytes" => break
       Some(code) => raise Status(code, msg.headers.description)
-      None => out.push(msg)
+      None => {
+        deliver(msg, header_size)
+        delivered += 1
+      }
     }
   }
-  out
 }
 
 ///|

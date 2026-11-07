@@ -11,6 +11,8 @@ pub struct WorkControl {
   priv mut active : Int32
   priv mut completed : Int64
   priv mut uncertain : Int64
+  priv mut peak_messages : Int32
+  priv mut peak_bytes : Int32
 }
 
 ///|
@@ -21,6 +23,8 @@ pub fn WorkControl::new() -> WorkControl {
     active: 0,
     completed: 0L,
     uncertain: 0L,
+    peak_messages: 0,
+    peak_bytes: 0,
   }
 }
 
@@ -46,6 +50,12 @@ pub fn WorkControl::completed(self : WorkControl) -> Int64 {
 /// Count dispositions with an unconfirmed outcome from managed consumption.
 pub fn WorkControl::uncertain(self : WorkControl) -> Int64 {
   self.uncertain
+}
+
+///|
+/// Largest admitted message count and byte total observed during managed consumption.
+pub fn WorkControl::prefetch_peaks(self : WorkControl) -> (Int32, Int32) {
+  (self.peak_messages, self.peak_bytes)
 }
 
 ///|
@@ -106,12 +116,8 @@ async fn Consumer::worker_fetch(
   control : WorkControl,
   poll_ms : Int32,
   recovery_timeout_ms : Int32,
-  batch~ : Int32 = 1,
-  max_bytes? : Int32,
 ) -> Array[@client.Received] {
-  @async.with_timeout(poll_ms + 1500, () => {
-    self.fetch(batch~, expires_ms=poll_ms, max_bytes?)
-  }) catch {
+  @async.with_timeout(poll_ms + 1500, () => self.fetch(expires_ms=poll_ms)) catch {
     error if recovery_timeout_ms > 0 && recoverable_pull_error(error) =>
       @async.with_timeout(recovery_timeout_ms, () => {
         let mut retry_delay_ms = 25
@@ -123,7 +129,7 @@ async fn Consumer::worker_fetch(
           if control.stopped_at is Some(_) {
             break
           }
-          try self.fetch(batch~, expires_ms=poll_ms, max_bytes?) catch {
+          try self.fetch(expires_ms=poll_ms) catch {
             error if recoverable_pull_error(error) => {
               @async.sleep(retry_delay_ms)
               retry_delay_ms = (retry_delay_ms * 2).min(500)

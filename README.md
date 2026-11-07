@@ -21,7 +21,7 @@ MoonBit 原生 NATS 客户端，提供异步消息通信、JetStream 持久消�
 
 协议与认证包支持 native、JS、wasm、wasm-gc。客户端及上层消息 API 支持 native 和 JS；JS 使用浏览器标准 WebSocket API，原生支持 TCP、TLS、WebSocket。CLI 为 native。
 
-当前版本 0.3.4，API 仍可能调整。尚未发布到 Mooncakes；仓库中的模块坐标为 `LilaLola67/moonnats`。
+当前版本 0.3.5，API 仍可能调整。尚未发布到 Mooncakes；仓库中的模块坐标为 `LilaLola67/moonnats`。
 
 ## 从源码运行
 

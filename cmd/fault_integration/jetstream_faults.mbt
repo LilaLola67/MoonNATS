@@ -47,6 +47,7 @@ async fn jetstream_fault_case() -> Unit {
       @async.with_timeout(5000, () => {
         consumer.consume_reliably(
           control,
+          concurrency=2,
           prefetch=4,
           prefetch_bytes=900,
           ack_timeout_ms=150,
@@ -68,6 +69,9 @@ async fn jetstream_fault_case() -> Unit {
       assert_true(uncertain[0].cause is @async.TimeoutError)
       assert_eq(control.completed(), 1L)
       assert_eq(control.uncertain(), 1L)
+      let (peak_messages, peak_bytes) = control.prefetch_peaks()
+      assert_eq(peak_messages, 1)
+      assert_true(peak_bytes >= 512 && peak_bytes <= 900)
       let exhausted = try
         js.publish_reliably(
           fault_subject,

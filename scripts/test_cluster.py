@@ -13,11 +13,13 @@ import tempfile
 import urllib.request
 
 import nats
+from nats.js.api import ConsumerConfig, KeyValueConfig
 
 
 ROOT = Path(__file__).resolve().parent.parent
 STREAM = "MOON_CLUSTER_JOBS"
 DURABLE = "workers"
+ELECTION_JOBS = 24
 CLIENT = ROOT / "_build/native/debug/build/cmd/cluster_integration/cluster_integration.exe"
 HTTP = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 
@@ -132,18 +134,24 @@ async def wait_replicas(nodes, *, fully_current):
             await asyncio.sleep(0.15)
 
 
-async def run_client(primary, peer, counts, *args, fault=None):
+async def run_client(primary, peer, counts, *args, fault=None, kill_worker=False):
     env = {**os.environ, "MOONNATS_CLUSTER_PRIMARY": primary.url,
            "MOONNATS_CLUSTER_PEER": peer.url, **counts}
     process = await asyncio.create_subprocess_exec(str(CLIENT), *args, cwd=ROOT, env=env,
         stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
     fault_seen = False
+    worker_killed = False
 
     async def pump(stream):
-        nonlocal fault_seen
+        nonlocal fault_seen, worker_killed
         while line := await stream.readline():
             line = line.decode(errors="replace").rstrip()
             print(line, flush=True)
+            if line == "RECEIPT_COMMITTED_BEFORE_ACK":
+                if not kill_worker or worker_killed:
+                    raise RuntimeError("unexpected worker crash marker")
+                worker_killed = True
+                process.kill()
             if line == "STOP_STREAM_LEADER":
                 if fault is None or fault_seen:
                     raise RuntimeError("unexpected leader stop request")
@@ -155,8 +163,11 @@ async def run_client(primary, peer, counts, *args, fault=None):
     try:
         async with asyncio.timeout(300):
             await asyncio.gather(pump(process.stdout), pump(process.stderr))
-            if await process.wait() != 0:
-                raise RuntimeError(f"MoonBit cluster client exited with status {process.returncode}")
+            code = await process.wait()
+            if kill_worker:
+                assert worker_killed and code != 0, (worker_killed, code)
+            elif code != 0:
+                raise RuntimeError(f"MoonBit cluster client exited with status {code}")
             if fault is not None and not fault_seen:
                 raise RuntimeError("stream leader fault was never exercised")
     finally:
@@ -166,7 +177,7 @@ async def run_client(primary, peer, counts, *args, fault=None):
 
 
 async def verify_final(nodes, jobs):
-    expected = 2 * jobs + 2
+    expected = 2 * jobs + 2 + ELECTION_JOBS
     for node in nodes:
         report = await asyncio.to_thread(node.monitor, "jsz?streams=true")
         local = next(stream for account in report["account_details"]
@@ -188,6 +199,9 @@ async def verify_final(nodes, jobs):
             assert jobs <= int.from_bytes(last_batch[:4], "big") < jobs * 2
             assert first[4:] == last_batch[4:] == bytes(i % 251 for i in range(4, 1024))
             assert (await js.get_msg(STREAM, seq=jobs + 1)).data == b"in-flight"
+            election = [(await js.get_msg(STREAM, seq=seq)).data
+                        for seq in range(jobs + 2, jobs + 2 + ELECTION_JOBS)]
+            assert set(election) == {bytes([i]) for i in range(ELECTION_JOBS)}
             assert (await js.get_msg(STREAM, seq=expected)).data == b"after-roll"
         finally:
             await nc.close()
@@ -233,6 +247,38 @@ async def exercise(nodes, core_count, job_count):
     await wait_routes(nodes)
     await wait_replicas(nodes, fully_current=True)
     await verify_final(nodes, job_count)
+    await verify_worker_crash(nodes)
+
+
+async def verify_worker_crash(nodes):
+    stream = "MN_WORKER_CRASH"
+    subject = "moon.worker.crash"
+    nc = await connect_oracle(nodes[0])
+    try:
+        js = nc.jetstream(timeout=5)
+        await js.add_stream(name=stream, subjects=[subject], num_replicas=3)
+        await js.add_consumer(stream, ConsumerConfig(
+            durable_name="worker", filter_subject=subject, ack_wait=1, num_replicas=3,
+        ))
+        receipts = await js.create_key_value(KeyValueConfig(
+            bucket=stream, history=4, replicas=3,
+        ))
+        ack = await js.publish(subject, b"order-42")
+        await run_client(nodes[0], nodes[1], {}, "--crash-worker", kill_worker=True)
+        assert (await receipts.get("order-42")).value == b"shipped"
+        pending = await js.consumer_info(stream, "worker")
+        assert pending.ack_floor.stream_seq == 0
+        await run_client(nodes[1], nodes[0], {}, "--resume-worker")
+        entries = await receipts.history("order-42")
+        assert len(entries) == 1 and entries[0].value == b"shipped"
+        final = await js.consumer_info(stream, "worker")
+        assert final.ack_floor.stream_seq == ack.seq
+        assert final.num_pending == final.num_ack_pending == 0
+        assert final.delivered.consumer_seq == 2
+        print("Worker crash after durable receipt: one business write, two deliveries, confirmed ACK PASS",
+              flush=True)
+    finally:
+        await nc.close()
 
 
 async def main(args):

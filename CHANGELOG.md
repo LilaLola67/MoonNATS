@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.5
+
+- Dispatch managed pull deliveries as they arrive with a shared message and byte budget. Keep batch fetch semantics for manual consumers.
+- Validate publishing across stream leader loss and restart a killed worker after its durable business write and before ACK.
+- Compare sparse, burst and mixed worker loads against 0.3.4 with a shared wire-level measurement of peak in-flight messages and bytes.
+
 ## 0.3.4
 
 - Add opt-in JetStream publish retries bounded by the target stream's deduplication window. Report unknown publish outcomes when confirmation remains unavailable.

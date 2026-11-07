@@ -37,6 +37,7 @@ with serving('test',config):
     run(executable('extended_integration'))
     run(sys.executable,'scripts/fault_proxy.py')
     run(sys.executable,'scripts/jetstream_faults.py',executable('fault_integration'))
+    run(sys.executable,'scripts/worker_benchmark.py','--current-only','--repetitions','1')
     # JavaScript uses the browser-standard WebSocket transport.
     os.environ['MOONNATS_TEST_URL']='ws://127.0.0.1:18080'
     run('node',root/'_build/js/debug/build/cmd/integration/integration.js')

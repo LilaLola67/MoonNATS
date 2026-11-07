@@ -104,7 +104,7 @@ pub struct Subscription {
   sid : Int32
   subject : String
   priv queue_group : String?
-  priv inbox : @aqueue.Queue[Received]
+  priv inbox : @aqueue.Queue[(Received, Int32)]
   priv mut remaining : Int32?
   priv mut pending : Int32
   priv mut pending_bytes : Int32
@@ -465,6 +465,7 @@ fn Client::dispatch(
   self : Client,
   msg : @wire.Message,
   headers : @wire.Headers,
+  header_size : Int32,
 ) -> Unit raise {
   self.received_messages += 1
   self.received_bytes += msg.payload.length().to_int64()
@@ -475,9 +476,9 @@ fn Client::dispatch(
       payload: msg.payload,
       headers,
     }
-    let cost = msg.payload.length() + headers.encode().length()
+    let cost = msg.payload.length() + header_size.max(12)
     if cost > self.options.max_pending_bytes - sub.pending_bytes ||
-      !sub.inbox.try_put(item) {
+      !sub.inbox.try_put((item, header_size)) {
       sub.closed = true
       sub.inbox.close(error=SlowConsumer)
       self.slow_consumers += 1
@@ -522,11 +523,11 @@ async fn Client::read_loop(self : Client) -> Unit {
       _ => None
     }
     if result is Some(bytes) {
-      let events = self.decoder.feed(bytes)
-      for event in events {
+      let events = self.decoder.feed_sized(bytes)
+      for (event, header_size) in events {
         match event {
-          Msg(m) => self.dispatch(m, @wire.Headers::new())
-          Hmsg(m, h) => self.dispatch(m, h)
+          Msg(m) => self.dispatch(m, @wire.Headers::new(), 0)
+          Hmsg(m, h) => self.dispatch(m, h, header_size)
           Ping => self.send(b"PONG\r\n") catch { _ => () }
           Pong =>
             if self.pong is Some(q) {
@@ -699,11 +700,22 @@ pub async fn Subscription::next(
   self : Subscription,
   timeout_ms~ : Int32 = 5000,
 ) -> Received {
+  self.next_with_header_size(timeout_ms~).0
+}
+
+///|
+/// Read a delivery and its original NATS header length (zero for MSG).
+pub async fn Subscription::next_with_header_size(
+  self : Subscription,
+  timeout_ms~ : Int32 = 5000,
+) -> (Received, Int32) {
   guard timeout_ms > 0 else { raise InvalidOption("timeout") }
-  let item = @async.with_timeout(timeout_ms, () => self.inbox.get())
+  let (item, header_size) = @async.with_timeout(timeout_ms, () => {
+    self.inbox.get()
+  })
   self.pending -= 1
-  self.pending_bytes -= item.payload.length() + item.headers.encode().length()
-  item
+  self.pending_bytes -= item.payload.length() + header_size.max(12)
+  (item, header_size)
 }
 
 ///|

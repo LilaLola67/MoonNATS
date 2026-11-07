@@ -95,3 +95,21 @@ test "topology-only INFO preserves negotiated publish capabilities" {
   assert_true(updated.headers)
   assert_eq(updated.connect_urls, ["127.0.0.1:4223"])
 }
+
+///|
+test "sized decoding preserves the raw header length across fragments" {
+  let header = b"NATS/1.0\r\nX-Test:     value  \r\n\r\n"
+  let size = header.length()
+  let prefix = @utf8.encode("HMSG demo 1 \{size} \{size + 1}\r\n")
+  let decoder = @moonnats.Decoder::new()
+  assert_eq(decoder.feed_sized(prefix + header[:4].to_owned()), [])
+  let events = decoder.feed_sized(header[4:].to_owned() + b"x\r\nPING\r\n")
+  assert_eq(events.length(), 2)
+  let (event, header_size) = events[0]
+  assert_eq(header_size, size)
+  guard event is @moonnats.Hmsg(message, headers) else { fail("expected HMSG") }
+  assert_eq(message.payload, b"x")
+  assert_eq(headers.get("X-Test"), Some("value"))
+  assert_true(headers.encode().length() < header_size)
+  assert_eq(events[1], (@moonnats.Ping, 0))
+}

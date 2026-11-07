@@ -117,5 +117,5 @@ let options = @client.Options::new(
 - `JetStream::publish_reliably` 需要稳定的 `message_id` 和 `expected_stream`。同一 Stream 内，每个 ID 对应一份固定内容。客户端查询 Stream 的 `duplicate_window`，要求总重试预算短于该窗口，并用同一 ID 重试短暂失败。返回的 `PubAck.duplicate` 表明服务端识别到重复发布。已尝试发送且结果仍不明确时，返回 `PublishOutcomeUnknown(stream, message_id)`。发送端应保留该业务 ID，用于核对结果。
 - `Consumer::consume_reliably` 绑定显式 ACK 的 Pull Consumer。处理器返回 `Confirm` 等待服务端确认 ACK，返回 `RetryAfter(ms)` 请求延迟重投，返回 `Terminate` 请求结束该消息在当前 Consumer 上的投递。处理器抛出的异常仍会结束本次消费。
 - 使用 `on_uncertain` 获取确认结果不明确的投递元数据和原因。受管消费的 `completed()` 统计得到服务端确认的成功 ACK，`uncertain()` 统计结果不明确的处置。NAK 和 TERM 采用协议的单向发送语义。
-- `prefetch` 和 `prefetch_bytes` 是单次消费调用的总预算，按并发 Worker 分配，各 Worker 处理完本批后再拉下一批。每个 Worker 的字节预算需要容纳最大消息及其协议开销。`poll_ms` 控制未填满的批次等待多久。预取的消息已进入服务端 ACK 计时，按处理速度、`AckWait` 和 `MaxAckPending` 选择批次。
+- `prefetch` 和 `prefetch_bytes` 是单次消费调用的总预算，由所有 Worker 共享。首条消息到达后就可交给空闲 Worker，待处理和处理中消息都占用预算。拉取器每次按当前剩余额度发一个请求。字节预算需要容纳最大消息及其主题、回复主题和 Headers。`poll_ms` 控制服务器等待填满 Pull 请求的时长。`WorkControl::prefetch_peaks()` 提供客户端接纳的消息条数和字节峰值。预取的消息已进入服务端 ACK 计时，按处理速度、`AckWait` 和 `MaxAckPending` 选择批次。
 - `WorkControl::stop()` 停止新拉取和新处理，已启动的处理和处置可以在 `drain_timeout_ms` 内结束。截止时间到达时请求协作取消，并返回 `WorkerDrainTimedOut`。本地预取后尚未开始处理的消息保留为未确认，由服务端的投递策略决定何时重投。处理器需要在可取消的异步操作处让出控制权。

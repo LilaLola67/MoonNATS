@@ -201,6 +201,9 @@ async fn job_load(
 }
 
 ///|
+let election_jobs = 24
+
+///|
 async fn leader_loss(client : @client.Client) -> Unit {
   let sub = client.subscribe("moon.cluster.recovered")
   client.flush()
@@ -209,27 +212,95 @@ async fn leader_loss(client : @client.Client) -> Unit {
   let control = @js.WorkControl::new()
   let mut first_sequence = 0L
   let mut delivery_count = 0L
+  let mut published_before_fault = false
+  let mut fault_requested = false
+  let mut retry_count = 0
+  let seen = FixedArray::make(election_jobs, false)
+  let mut received = 0
   ignore(js.publish(jobs, b"in-flight", message_id="in-flight"))
-  @async.with_timeout(35000, () => {
-    worker.consume_reliably(control, recovery_timeout_ms=20000, (msg, meta) => {
-      assert_eq(msg.payload, b"in-flight")
-      if first_sequence == 0L {
-        first_sequence = meta.stream_sequence
-        @stdio.stderr.text.write("STOP_STREAM_LEADER\n")
-        while client.statistics().reconnects == 0L {
+  @async.with_timeout(40000, () => {
+    @async.with_task_group(group => {
+      group.spawn_bg(() => {
+        for i in 0..<election_jobs {
+          if i == 1 {
+            while !fault_requested {
+              @async.sleep(1)
+            }
+          }
+          let id = "election-" + i.to_string()
+          // Stream discovery can fail during election before any publish is attempted.
+          @async.with_timeout(18000, () => {
+            while true {
+              try
+                js.publish_reliably(
+                  jobs,
+                  Bytes::make(1, i.to_byte()),
+                  message_id=id,
+                  expected_stream=stream_name,
+                  timeout_ms=800,
+                  attempt_timeout_ms=150,
+                )
+              catch {
+                @client.Disconnected
+                | @client.NoResponders
+                | @async.TimeoutError
+                | @js.PublishDeadlineExceeded
+                | @js.PublishOutcomeUnknown(_, _)
+                | @js.Api(503, _, _) => {
+                  retry_count += 1
+                  @async.sleep(25)
+                }
+                error => raise error
+              } noraise {
+                _ => break
+              }
+            }
+          })
+          if i == 0 {
+            published_before_fault = true
+          }
           @async.sleep(10)
         }
-        @js.RetryAfter(50)
-      } else {
-        assert_eq(meta.stream_sequence, first_sequence)
-        assert_true(meta.deliveries >= 2L)
-        delivery_count = meta.deliveries
-        control.stop()
-        @js.Confirm
-      }
+      })
+      worker.consume_reliably(
+        control,
+        concurrency=2,
+        recovery_timeout_ms=20000,
+        (msg, meta) => {
+          if msg.payload == b"in-flight" {
+            if first_sequence == 0L {
+              first_sequence = meta.stream_sequence
+              while !published_before_fault {
+                @async.sleep(1)
+              }
+              fault_requested = true
+              @stdio.stderr.text.write("STOP_STREAM_LEADER\n")
+              while client.statistics().reconnects == 0L {
+                @async.sleep(10)
+              }
+              return @js.RetryAfter(50)
+            }
+            assert_eq(meta.stream_sequence, first_sequence)
+            assert_true(meta.deliveries >= 2L)
+            delivery_count = meta.deliveries
+          } else {
+            assert_eq(msg.payload.length(), 1)
+            let id = msg.payload[0].to_int()
+            assert_true(id < election_jobs)
+            if !seen[id] {
+              seen[id] = true
+              received += 1
+            }
+          }
+          if delivery_count > 0L && received == election_jobs {
+            control.stop()
+          }
+          @js.Confirm
+        },
+      )
     })
   })
-  assert_eq(control.completed(), 1L)
+  assert_eq(received, election_jobs)
   client.publish(sub.subject, b"restored")
   client.flush()
   assert_eq(sub.next().payload, b"restored")
@@ -238,6 +309,8 @@ async fn leader_loss(client : @client.Client) -> Unit {
     "phase": "stream-leader-failover",
     "deliveries": @js.integer(delivery_count),
     "reconnects": @js.integer(client.statistics().reconnects),
+    "election_jobs": Json(received),
+    "outer_retries": Json(retry_count),
   }
   println(report.stringify())
 }
@@ -249,7 +322,9 @@ async fn main {
   let args = @env.args()
   @client.with_client(options(primary), client => {
     let js = @js.JetStream::new(client)
-    if args.contains("--prepare") {
+    if args.contains("--crash-worker") || args.contains("--resume-worker") {
+      crash_worker(js, args.contains("--resume-worker"))
+    } else if args.contains("--prepare") {
       @client.with_client(options(peer), receiver => {
         core_load(client, receiver, count("MOONNATS_CLUSTER_CORE_COUNT", 50000))
       })

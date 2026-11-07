@@ -35,7 +35,7 @@ pub fn connect_command(
     "tls_required": false,
     "name": Json(options.name),
     "lang": "moonbit",
-    "version": "0.3.4",
+    "version": "0.3.5",
     "protocol": 1,
     "headers": Json(headers),
     "no_responders": Json(headers),

@@ -2,6 +2,7 @@ import {
   "LilaLola67/moonnats/client",
   "LilaLola67/moonnats" @wire,
   "moonbitlang/core/async",
+  "moonbitlang/core/async/aqueue",
   "moonbitlang/core/json",
   "moonbitlang/core/encoding/utf8",
   "moonbitlang/core/string",

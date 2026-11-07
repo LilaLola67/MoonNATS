@@ -1,5 +1,6 @@
 import {
   "LilaLola67/moonnats/client",
+  "LilaLola67/moonnats/kv",
   "LilaLola67/moonnats/jetstream" @js,
   "moonbitlang/core/async",
   "moonbitlang/core/async/stdio",
