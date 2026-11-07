@@ -137,10 +137,10 @@ fn recoverable_pull_error(error : Error) -> Bool {
   match error {
     @client.Disconnected | @client.PublishUncertain | @async.TimeoutError =>
       true
-    // During a graceful shutdown NATS can release an in-flight pull before
-    // closing TCP. It uses the same status as deleting the consumer. Retry
-    // against the existing durable only, within the caller's recovery budget.
-    Status(409, "Consumer Deleted")
+    // A broker can release an in-flight pull before closing the connection.
+    // Retry against the existing durable only, within the recovery budget.
+    Status(409, "Server Shutdown")
+    | Status(409, "Consumer Deleted")
     | Status(409, "Leadership Change")
     | Status(503, _) => true
     _ => false

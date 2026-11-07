@@ -2,6 +2,7 @@
 async fn main {
   let states = []
   let mut credential_calls = 0
+  let mut stage = "setup"
   @client.with_client(
     @client.Options::new(
       servers=["nats://127.0.0.1:14226", "nats://127.0.0.1:14225"],
@@ -81,13 +82,26 @@ async fn main {
                 control.stop()
               }
             }
-          })
+          }) catch {
+            @js.Status(code, description) => {
+              @stdio.stderr.text.write(
+                "Worker pull status " +
+                code.to_string() +
+                " " +
+                description +
+                "\n",
+              )
+              raise @js.Status(code, description)
+            }
+            error => raise error
+          }
         })
         @async.with_timeout(3000, () => {
           while !started {
             @async.sleep(5)
           }
         })
+        stage = "restart"
         @stdio.stderr.text.write("RESTART\n")
         @async.with_timeout(3000, () => {
           while c.state() != @client.Reconnecting {
@@ -115,15 +129,18 @@ async fn main {
         assert_eq(sub.next().payload, b"buffered")
         assert_eq(c.statistics().buffered_bytes, 0)
         assert_true(credential_calls >= 2)
+        stage = "KV resnapshot"
         assert_true(
           cache.next() is @kv.Snapshot(entries) && entries.length() == 1,
         )
         assert_eq(cache.get("config").unwrap().value, b"saved")
         ignore(bucket.put("config", b"new"))
+        stage = "ordered replay"
         assert_eq(ordered.next().payload, b"new")
         ordered.close()
         cache.close()
         bucket.destroy()
+        stage = "TTL resnapshot"
         assert_true(
           expiring_cache.next() is @kv.Snapshot(entries) && entries.is_empty(),
         )
@@ -135,6 +152,7 @@ async fn main {
             @async.sleep(5)
           }
         })
+        stage = "worker follow-up"
         ignore(js.publish("recovery.jobs", b"new job"))
       })
       assert_true(redelivered)
@@ -224,5 +242,19 @@ async fn main {
         "recovery: failover, server restart, subscription limits, timeout/cancel cleanup, slow consumers, queue groups, heartbeat and drain PASS",
       )
     },
-  )
+  ) catch {
+    @js.Status(code, description) => {
+      @stdio.stderr.text.write(
+        "Recovery stage " +
+        stage +
+        " status " +
+        code.to_string() +
+        " " +
+        description +
+        "\n",
+      )
+      raise @js.Status(code, description)
+    }
+    error => raise error
+  }
 }
