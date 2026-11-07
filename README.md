@@ -21,7 +21,7 @@ MoonBit 原生 NATS 客户端，提供异步消息通信、JetStream 持久消�
 
 协议与认证包支持 native、JS、wasm、wasm-gc。客户端及上层消息 API 支持 native 和 JS；JS 使用浏览器标准 WebSocket API，原生支持 TCP、TLS、WebSocket。CLI 为 native。
 
-当前版本 0.3.1，API 仍可能调整。尚未发布到 Mooncakes；仓库中的模块坐标为 `LilaLola67/moonnats`。
+当前版本 0.3.2，API 仍可能调整。尚未发布到 Mooncakes；仓库中的模块坐标为 `LilaLola67/moonnats`。
 
 ## 从源码运行
 
@@ -110,7 +110,7 @@ python scripts/download_server.py
 python scripts/test_all.py
 ```
 
-下载脚本固定官方 NATS Server 2.15.2 并核对发布的 SHA-256。测试仅监听本机地址，运行后关闭自己启动的服务器。覆盖原生与 JS、真实重连、取消清理、认证、TLS 拒绝路径、队列组、背压、Drain、JetStream 重投、KV CAS/Watch、对象损坏检测，以及官方 nats-py 的 KV/Object Store 双向互操作。CI 同时执行四后端检查/构建/单元测试和独立集成测试。
+下载脚本固定官方 NATS Server 2.15.2 并核对发布的 SHA-256。测试仅监听本机地址，运行后关闭自己启动的服务器。覆盖原生与 JS、真实重连、取消清理、认证、TLS 拒绝路径、队列组、背压、Drain、JetStream 重投、KV CAS/Watch、对象损坏检测，以及官方 nats-py 的 KV/Object Store 双向互操作。CI 同时执行四后端检查、构建、单元测试和独立集成测试。三节点负载验收核对跨节点消息、三副本持久任务、leader 故障转移和副本追平。
 
 ## 浏览器示例
 

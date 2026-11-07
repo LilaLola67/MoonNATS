@@ -1,6 +1,6 @@
 ///|
 let usage : String =
-  #|MoonNATS 0.3.1
+  #|MoonNATS 0.3.2
   #|Usage: moonnats COMMAND [ARGS]
   #|  info | stats | metrics | account-info
   #|  pub SUBJECT TEXT | request SUBJECT TEXT | sub SUBJECT [COUNT]

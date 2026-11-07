@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.2
+
+- Add a real three-node cluster acceptance suite with 50,000 cross-node Core messages and 12,000 replicated tasks across two load phases.
+- Verify seed-only discovery, subscription recovery, task redelivery after a stream leader crash, and durable progress through a consumer leader restart.
+- Check all three local replica stores and durable acknowledgement progress using the official Python client and server monitoring.
+
 ## 0.3.1
 
 - Resume durable workers after transient fetch failures and optionally extend the acknowledgement deadline during a handler.
