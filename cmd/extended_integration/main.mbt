@@ -154,6 +154,37 @@ async fn main {
       assert_eq(@js.metadata(retried).deliveries, 2L)
       @js.acknowledge(c, retried)
       failed_worker.delete()
+      let progress_worker = js.add_consumer(
+        "MN_EXT",
+        "progress-worker",
+        @js.ConsumerConfig::new(filter="extended.failed", ack_wait_ms=200),
+      )
+      let progress_control = @js.WorkControl::new()
+      let mut progress_started = false
+      @async.with_task_group(group => {
+        group.spawn_bg(() => {
+          progress_worker.consume(
+            progress_control,
+            ack_mode=@js.OnSuccess,
+            progress_ms=30,
+            msg => {
+              progress_started = true
+              assert_eq(msg.payload, b"fail")
+              @async.sleep(550)
+              progress_control.stop()
+            },
+          )
+        })
+        @async.with_timeout(2000, () => {
+          while !progress_started {
+            @async.sleep(5)
+          }
+        })
+        @async.sleep(250)
+        assert_true(progress_worker.fetch(expires_ms=150).is_empty())
+      })
+      assert_eq(progress_control.completed(), 1L)
+      progress_worker.delete()
       js.delete_stream("MN_EXT")
       println(
         "extended JetStream: bounded async publishing, worker stop/drain, ordered replay, push heartbeat, typed config and pagination PASS",
@@ -197,6 +228,45 @@ async fn main {
       )
       assert_eq(js.all_consumers("KV_MN_CACHE").length(), 0)
       bucket.destroy()
+      js.delete_stream("KV_MN_TTL") catch {
+        _ => ()
+      }
+      let ttl = @kv.create(js, "MN_TTL", ttl_ms=1200)
+      ignore(ttl.put("old", b"old value"))
+      let live = ttl.config_cache(max_keys=1)
+      assert_true(live.next() is @kv.Snapshot(entries) && entries.length() == 1)
+      @async.sleep(1300)
+      assert_true(live.snapshot().is_empty())
+      assert_true(live.get("old") is None)
+      ignore(ttl.put("new", b"new value"))
+      assert_true(live.next() is @kv.Updated(entry) && entry.key == "new")
+      live.close()
+      ttl.destroy()
+      js.delete_stream("KV_MN_TTL_MARKER") catch {
+        _ => ()
+      }
+      let marked = @kv.create(js, "MN_TTL_MARKER", ttl_ms=1200)
+      guard js.stream_info("KV_MN_TTL_MARKER")
+        is { "config": Object(config), .. } else {
+        raise @js.Invalid("TTL marker stream config")
+      }
+      config["allow_msg_ttl"] = true
+      config["subject_delete_marker_ttl"] = @js.integer(5000000000L)
+      ignore(js.update_stream("KV_MN_TTL_MARKER", Json::object(config)))
+      let marked_cache = marked.config_cache()
+      ignore(marked_cache.next())
+      ignore(marked.put("key", b"temporary"))
+      assert_true(
+        marked_cache.next() is @kv.Updated(entry) && entry.operation == "PUT",
+      )
+      assert_true(
+        marked_cache.next() is @kv.Updated(entry) && entry.operation == "EXPIRE",
+      )
+      assert_true(marked_cache.get("key") is None)
+      assert_eq(marked.get("key").operation, "EXPIRE")
+      ignore(marked.create("key", b"recreated"))
+      marked_cache.close()
+      marked.destroy()
       println(
         "config cache: initial snapshot completion, updates, tombstones, empty snapshot and close PASS",
       )

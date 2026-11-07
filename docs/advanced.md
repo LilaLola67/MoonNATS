@@ -19,6 +19,8 @@ consumer.consume(control, concurrency=4, ack_mode=@js.OnSuccess, message => {
 })
 ```
 
+Worker 在拉取遇到暂时性网络错误后等待连接恢复，继续从同一个 durable Consumer 拉取。`recovery_timeout_ms` 默认 30000，设为 0 时直接报告拉取错误。`OnSuccess` 可设置 `progress_ms` 定期发送 `+WPI`，间隔应短于服务器 `AckWait`。连接中断时无法延长确认期限，业务处理应按任务 ID 幂等。
+
 Publisher 作用域退出会等待确认并报告未观察到的失败；`pending`、`pending_bytes`、`ack_metrics` 提供在途数量、载荷预算和确认耗时统计。停止 Worker 不会删除 durable Consumer；`Manual` 模式由业务调用 `acknowledge`。处理器失败不隐式 ACK，也不替业务决定死信策略。
 
 ## Push 与有序回放
@@ -63,7 +65,7 @@ match cache.next() {
 }
 ```
 
-构建成功表示初始视图完成，空 Bucket 同样产生空 Snapshot。之后持续调用 `next`，以 Updated 更新本地视图，DEL/PURGE 移除键。断线期间先检查 `ready`；重连或序号缺口后重新生成完整 Snapshot。不要在重建时继续使用之前缓存的快照。长时间不调用 next 会导致本地视图落后。
+构建成功表示初始视图完成，空 Bucket 同样产生空 Snapshot。之后持续调用 `next`，以 Updated 更新本地视图，DEL/PURGE 移除键。断线期间先检查 `ready`；重连或序号缺口后重新生成完整 Snapshot。不要在重建时继续使用之前缓存的快照。长时间不调用 next 会导致本地视图落后。配置缓存创建和重建时读取 Stream 的 `max_age`，因此需有 Stream INFO 权限。`get` 和 `snapshot` 用服务器写入时间和本机时钟过滤 Bucket TTL 已到期的键。启用服务器删除标记的 Bucket 会产生 `operation="EXPIRE"` 的 `Updated` 事件。
 
 ## 对象管理
 
@@ -88,6 +90,7 @@ println(archive.name)
 let options = @client.Options::new(
   servers=["tls://localhost:4222"],
   tls_first=true,
+  require_tls=true,
   credentials=nonce => {
     let credentials = @auth.Credentials::parse(@fs.read_text("private/user.creds"))
     credentials.key.sign_nonce(nonce.unwrap(), jwt=credentials.jwt)
@@ -95,7 +98,7 @@ let options = @client.Options::new(
 )
 ```
 
-`@fs` 对应 `moonbitlang/core/async/fs`，文件读写适用于 native。每次建连与重连均重新调用 provider，可读取轮换后的文件或向密钥管理器请求签名。provider 优先于静态 signer/connect，不会在连接中途定时刷新。只在服务器配置 TLS-first 时启用 `tls_first`；标准 NATS TLS 保持默认 `false`。运行时尚不支持客户端证书配置。
+`@fs` 对应 `moonbitlang/core/async/fs`，文件读写适用于 native。每次建连与重连均重新调用 provider，可读取轮换后的文件或向密钥管理器请求签名。provider 优先于静态 signer/connect，不会在连接中途定时刷新。只在服务器配置 TLS-first 时启用 `tls_first`；标准 NATS TLS 保持默认 `false`。`require_tls=true` 在拨号前过滤地址。native 接受 `tls://` 和 `wss://`，JS 接受 `wss://`。首次连接、重连和服务发现遵循同一策略。普通 `tls://` 仍先读取服务器 `INFO`，随后验证证书并加密 `CONNECT`。若需要加密首条 `INFO`，服务端和客户端均启用 TLS-first。
 
 ## 恢复与指标
 

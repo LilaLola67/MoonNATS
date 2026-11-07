@@ -42,6 +42,7 @@ with serving('test',config):
     run('node',root/'_build/js/debug/build/cmd/ws_integration/ws_integration.js')
     run(sys.executable,'scripts/micro_oracle.py')
     run(executable('benchmark'))
+    run(sys.executable,'scripts/package_smoke.py')
     run(executable('oracle'));run(sys.executable,'scripts/oracle.py');run(executable('oracle'),'--verify')
     os.environ['MOONNATS_URL']='nats://127.0.0.1:14222'
     for example in ['pubsub','request_reply','tasks','micro','workers']:
@@ -66,4 +67,5 @@ with serving('tls-first',auth.replace('14223','14228').replace('tls {','tls { ha
     env={**os.environ,'MOONNATS_URL':'nats://127.0.0.1:14227','MOONNATS_CREDS':'.test-data/user.creds'}
     result=subprocess.run([str(executable('moonnats')),'info'],env=env,capture_output=True,text=True,check=True,timeout=10)
     assert 'server_id' in result.stdout
+run(sys.executable,'scripts/tls_policy.py',server)
 print('All real-server integration suites passed')

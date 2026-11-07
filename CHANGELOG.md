@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.1
+
+- Resume durable workers after transient fetch failures and optionally extend the acknowledgement deadline during a handler.
+- Add a TLS-only endpoint policy for initial connections, failover and discovery.
+- Exclude expired bucket values from KV cache reads and recognize server expiration markers.
+- Verify Core and JetStream examples from a packaged dependency in a fresh MoonBit module.
+
 ## 0.3.0
 
 - Add scoped bounded JetStream publishers, continuous concurrent workers, typed configs and full pagination.

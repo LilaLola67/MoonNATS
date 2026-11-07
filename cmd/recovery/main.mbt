@@ -35,42 +35,114 @@ async fn main {
         filter="$KV.MN_RECOVERY.>",
       )
       ignore(ordered.next())
-      @stdio.stderr.text.write("RESTART\n")
-      @async.with_timeout(3000, () => {
-        while c.state() != @client.Reconnecting {
-          @async.sleep(5)
-        }
-      })
-      assert_true(!cache.ready())
-      c.publish("recovery", b"buffered")
-      assert_true(c.statistics().buffered_bytes > 0)
-      assert_true(
-        try {
-          c.publish("recovery", Bytes::make(200, 0))
-          false
-        } catch {
-          @client.SlowConsumer => true
-          _ => false
-        },
+      js.delete_stream("MN_WORKER_RECOVERY") catch {
+        _ => ()
+      }
+      ignore(
+        js.add_stream(
+          "MN_WORKER_RECOVERY",
+          @js.StreamConfig::new(["recovery.jobs"], storage=@js.File),
+        ),
       )
-      @async.with_timeout(5000, () => {
-        while c.statistics().reconnects == 0L {
-          @async.sleep(10)
-        }
-      })
-      c.flush()
-      assert_eq(sub.next().payload, b"buffered")
-      assert_eq(c.statistics().buffered_bytes, 0)
-      assert_true(credential_calls >= 2)
-      assert_true(
-        cache.next() is @kv.Snapshot(entries) && entries.length() == 1,
+      let worker = js.add_consumer(
+        "MN_WORKER_RECOVERY",
+        "durable",
+        @js.ConsumerConfig::new(filter="recovery.jobs", ack_wait_ms=500),
       )
-      assert_eq(cache.get("config").unwrap().value, b"saved")
-      ignore(bucket.put("config", b"new"))
-      assert_eq(ordered.next().payload, b"new")
-      ordered.close()
-      cache.close()
-      bucket.destroy()
+      ignore(js.publish("recovery.jobs", b"retry after restart"))
+      js.delete_stream("KV_MN_EXPIRING") catch {
+        _ => ()
+      }
+      let expiring = @kv.create(js, "MN_EXPIRING", ttl_ms=1500)
+      ignore(expiring.put("temporary", b"valid before outage"))
+      let expiring_cache = expiring.config_cache()
+      assert_true(
+        expiring_cache.next() is @kv.Snapshot(entries) && entries.length() == 1,
+      )
+      let control = @js.WorkControl::new()
+      let mut started = false
+      let mut redelivered = false
+      @async.with_task_group(group => {
+        group.spawn_bg(() => {
+          worker.consume(control, concurrency=2, recovery_timeout_ms=7000, msg => {
+            if msg.payload == b"retry after restart" &&
+              @js.metadata(msg).deliveries == 1L {
+              started = true
+              while c.state() == @client.Connected {
+                @async.sleep(5)
+              }
+              // Leave the first delivery unconfirmed so JetStream can redeliver it.
+            } else {
+              @js.acknowledge(c, msg, sync=true)
+              if msg.payload == b"retry after restart" {
+                redelivered = true
+              }
+              if msg.payload == b"new job" {
+                control.stop()
+              }
+            }
+          })
+        })
+        @async.with_timeout(3000, () => {
+          while !started {
+            @async.sleep(5)
+          }
+        })
+        @stdio.stderr.text.write("RESTART\n")
+        @async.with_timeout(3000, () => {
+          while c.state() != @client.Reconnecting {
+            @async.sleep(5)
+          }
+        })
+        assert_true(!cache.ready())
+        c.publish("recovery", b"buffered")
+        assert_true(c.statistics().buffered_bytes > 0)
+        assert_true(
+          try {
+            c.publish("recovery", Bytes::make(200, 0))
+            false
+          } catch {
+            @client.SlowConsumer => true
+            _ => false
+          },
+        )
+        @async.with_timeout(5000, () => {
+          while c.statistics().reconnects == 0L {
+            @async.sleep(10)
+          }
+        })
+        c.flush()
+        assert_eq(sub.next().payload, b"buffered")
+        assert_eq(c.statistics().buffered_bytes, 0)
+        assert_true(credential_calls >= 2)
+        assert_true(
+          cache.next() is @kv.Snapshot(entries) && entries.length() == 1,
+        )
+        assert_eq(cache.get("config").unwrap().value, b"saved")
+        ignore(bucket.put("config", b"new"))
+        assert_eq(ordered.next().payload, b"new")
+        ordered.close()
+        cache.close()
+        bucket.destroy()
+        assert_true(
+          expiring_cache.next() is @kv.Snapshot(entries) && entries.is_empty(),
+        )
+        assert_true(expiring_cache.get("temporary") is None)
+        expiring_cache.close()
+        expiring.destroy()
+        @async.with_timeout(5000, () => {
+          while !redelivered {
+            @async.sleep(5)
+          }
+        })
+        ignore(js.publish("recovery.jobs", b"new job"))
+      })
+      assert_true(redelivered)
+      assert_eq(control.completed(), 3L)
+      js.delete_stream("MN_WORKER_RECOVERY")
+      println(
+        "durable worker resumed after restart, redelivery acknowledged and expired config omitted PASS",
+      )
       assert_true(states.contains(@client.Reconnecting))
       assert_true(
         try {

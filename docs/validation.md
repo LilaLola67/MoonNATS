@@ -22,12 +22,18 @@ python scripts/test_all.py
 | 协议/认证单元测试 | 任意分片、二进制、畸形帧、长度边界、Int64 精度、NKey 向量、creds 格式、配置校验 |
 | integration / extended_integration | native 与 JS 的消息、持久化、KV、对象、Worker、发布确认、Push 流控/心跳、有序恢复、微服务生命周期 |
 | fault_proxy.py | 真实服务器链路分片、二进制往返、Lame Duck INFO 注入与主动重连 |
-| recovery.py | 持久化服务器重启、订阅恢复、有界断线缓存、凭据再次调用、配置快照重建、Ordered Reader 恢复 |
+| recovery.py | 持久化服务器重启、订阅与 Worker 恢复、未确认任务重投、有界断线缓存、配置快照重建和过期键排除 |
+| tls_policy.py | 停掉已验证的 TLS 服务器后，确认客户端拒绝拨号到明文备用地址 |
+| package_smoke.py | 解包发行产物并由全新 MoonBit 工程导入，运行 Core 与 JetStream 示例 |
 | auth_integration | 证书与主机名拒绝、错误凭据、用户密码、Token、NKey、operator/account/user JWT、标准 creds、动态凭据、TLS-first |
 | oracle.py | 官方 nats-py 与 MoonNATS 双向读取 KV、对象与链接数据 |
 | micro_oracle.py | 官方 nats-py 请求 MoonNATS Endpoint、标准 PING/INFO/STATS 字段 |
 
 持续集成在 Ubuntu 上运行四后端检查/构建/单元测试，以及原生/Node WebSocket 真实服务器集成任务。认证和网络应用层在 native/JS 运行，wasm/wasm-gc 只验证其支持的协议与认证包。
+
+## 发包验收
+
+`test_all.py` 在本机服务器运行时执行 `package_smoke.py`。测试将 `moon package` 的 ZIP 解包到临时目录，用临时 Moon workspace 将解包后的模块接入独立工程，并运行发布订阅和 JetStream 示例。版本末位从 1 递增到 9 后进位，例如 0.3.9 之后为 0.4.0。
 
 ## 可复现基准
 

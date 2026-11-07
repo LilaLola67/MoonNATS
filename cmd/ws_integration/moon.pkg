@@ -1,5 +1,6 @@
 import {
   "LilaLola67/moonnats/client",
+  "LilaLola67/moonnats" @wire,
   "LilaLola67/moonnats/typed",
   "moonbitlang/core/json",
 }

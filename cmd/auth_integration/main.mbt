@@ -1,5 +1,42 @@
 ///|
 async fn main {
+  if @env.args().contains("--tls-policy") {
+    let mut credential_calls = 0
+    assert_true(
+      try {
+        @client.with_client(
+          @client.Options::new(
+            servers=["tls://localhost:14230", "nats://127.0.0.1:14231"],
+            require_tls=true,
+            heartbeat_ms=50,
+            timeout_ms=300,
+            reconnect_attempts=2,
+            reconnect_delay_ms=20,
+            reconnect_jitter_ms=0,
+            trust=@client.CustomPemFile(".test-data/cert.pem"),
+            credentials=_ => {
+              credential_calls += 1
+              @wire.ConnectOptions::new(
+                user="test-user",
+                password="synthetic-test-password",
+              )
+            },
+          ),
+          c => {
+            c.flush()
+            @stdio.stderr.text.write("TLS_READY\n")
+            @async.sleep(5000)
+          },
+        )
+        false
+      } catch {
+        @client.RetryExhausted => true
+        _ => false
+      },
+    )
+    assert_eq(credential_calls, 1)
+    return
+  }
   let key = @auth.UserKey::from_raw_seed(Bytes::make(32, 0))
   if @env.args().contains("--public") {
     println(key.public_key)

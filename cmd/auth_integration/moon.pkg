@@ -13,3 +13,7 @@ supported_targets = "+native"
 import {
   "moonbitlang/core/async/fs",
 }
+
+import {
+  "moonbitlang/core/async/stdio",
+}
